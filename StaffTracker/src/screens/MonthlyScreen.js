@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,13 +27,18 @@ export default function MonthlyScreen() {
   const [filterType, setFilterType] = useState('monthly');
   const [customStart, setCustomStart] = useState(now.startOf('month').format('YYYY-MM-DD'));
   const [customEnd, setCustomEnd] = useState(now.endOf('month').format('YYYY-MM-DD'));
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [showCalendarPicker, setShowCalendarPicker] = useState(false);
+  const [datePickerMode, setDatePickerMode] = useState('start');
 
   const loadStaffList = async () => {
     const list = await getAllStaff();
     setStaff(list);
     if (list.length > 0 && !selected) {
       setSelected(list[0]);
+    } else if (list.length > 0 && selected) {
+      const updated = list.find(s => s.id === selected.id);
+      if (!updated) setSelected(list[0]);
     }
   };
 
@@ -43,6 +48,7 @@ export default function MonthlyScreen() {
     let att;
     let advances = [];
     let startDate, endDate;
+    const staffSalaryType = selected.salary_type || 'monthly';
     
     if (filterType === 'monthly') {
       startDate = now.startOf('month').format('YYYY-MM-DD');
@@ -74,11 +80,12 @@ export default function MonthlyScreen() {
     const paidDays = present + leave;
     
     let salaryToUse;
-    if (filterType === 'weekly' || (selected.salary_type === 'weekly')) {
+    const daysInMonth = now.daysInMonth();
+    
+    if (staffSalaryType === 'weekly') {
       const weeklyDays = 7;
       salaryToUse = (selected.salary / weeklyDays) * paidDays;
-    } else if (filterType === 'custom' || selected.salary_type === 'manual') {
-      const daysInMonth = now.daysInMonth();
+    } else if (staffSalaryType === 'manual' || filterType === 'custom') {
       salaryToUse = (selected.salary / daysInMonth) * paidDays;
     } else {
       salaryToUse = (selected.salary / days) * paidDays;
@@ -127,6 +134,43 @@ export default function MonthlyScreen() {
     }
   };
 
+  const openDatePicker = (mode) => {
+    setDatePickerMode(mode);
+    setShowCalendarPicker(true);
+  };
+
+  const handleDateSelect = (day) => {
+    const selectedDate = day.dateString;
+    if (datePickerMode === 'start') {
+      setCustomStart(selectedDate);
+      if (dayjs(selectedDate).isAfter(dayjs(customEnd))) {
+        setCustomEnd(selectedDate);
+      }
+    } else {
+      setCustomEnd(selectedDate);
+    }
+    setShowCalendarPicker(false);
+  };
+
+  const getCalendarTheme = () => ({
+    backgroundColor: '#ffffff',
+    calendarBackground: '#ffffff',
+    textSectionTitleColor: '#6B7280',
+    selectedDayBackgroundColor: '#2563EB',
+    selectedDayTextColor: '#ffffff',
+    todayTextColor: '#2563EB',
+    dayTextColor: '#374151',
+    textDisabledColor: '#D1D5DB',
+    arrowColor: '#2563EB',
+    monthTextColor: '#111827',
+    textDayFontWeight: '500',
+    textMonthFontWeight: '600',
+    textDayHeaderFontWeight: '500',
+    textDayFontSize: 14,
+    textMonthFontSize: 16,
+    textDayHeaderFontSize: 12,
+  });
+
   const markedDates = {};
   attendance.forEach(r => {
     markedDates[r.date] = {
@@ -164,16 +208,15 @@ export default function MonthlyScreen() {
 
   const getFilterLabel = () => {
     if (filterType === 'monthly') return now.format('MMMM YYYY');
-    if (filterType === 'weekly') return `${now.startOf('week').format('DD MMM')} - ${now.endOf('week').format('DD MMM')}`;
+    if (filterType === 'weekly') return `Week: ${now.startOf('week').format('DD MMM')} - ${now.endOf('week').format('DD MMM')}`;
     return `${dayjs(customStart).format('DD MMM')} - ${dayjs(customEnd).format('DD MMM YYYY')}`;
   };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>Monthly View</Text>
-        <TouchableOpacity style={styles.filterBtn} onPress={() => setShowDatePicker(true)}>
-          <Ionicons name="filter-outline" size={16} color="#2563EB" />
+        <TouchableOpacity style={styles.filterBtn} onPress={() => setShowFilterModal(true)}>
+          <Ionicons name="filter" size={16} color="#2563EB" />
           <Text style={styles.filterBtnText}>{getFilterLabel()}</Text>
           <Ionicons name="chevron-down" size={16} color="#2563EB" />
         </TouchableOpacity>
@@ -238,12 +281,12 @@ export default function MonthlyScreen() {
         <View style={styles.empty}><Text style={styles.emptyText}>Add staff first from the Staff tab.</Text></View>
       )}
 
-      <Modal visible={showDatePicker} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+      <Modal visible={showFilterModal} transparent animationType="fade">
+        <Pressable style={styles.modalOverlay} onPress={() => setShowFilterModal(false)}>
           <View style={styles.modalBox}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Period</Text>
-              <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+              <TouchableOpacity onPress={() => setShowFilterModal(false)}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
@@ -256,7 +299,7 @@ export default function MonthlyScreen() {
                   style={[styles.filterOption, filterType === type.key && styles.filterOptionActive]}
                 >
                   <Ionicons 
-                    name={filterType === type.key ? 'radio-button-on' : 'radio-button-off'} 
+                    name={filterType === type.key ? 'radio-button-on' : 'ellipse-outline'} 
                     size={20} 
                     color={filterType === type.key ? '#2563EB' : '#6B7280'} 
                   />
@@ -271,39 +314,65 @@ export default function MonthlyScreen() {
               <View style={styles.dateInputs}>
                 <View style={styles.dateField}>
                   <Text style={styles.dateLabel}>Start Date</Text>
-                  <View style={styles.inputWrapper}>
-                    <Ionicons name="calendar-outline" size={18} color="#6B7280" style={styles.inputIcon} />
-                    <TextInput
-                      style={styles.input}
-                      value={customStart}
-                      onChangeText={setCustomStart}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor="#9CA3AF"
-                    />
-                  </View>
+                  <TouchableOpacity 
+                    style={styles.datePickerBtn}
+                    onPress={() => openDatePicker('start')}
+                  >
+                    <Ionicons name="calendar" size={18} color="#6B7280" />
+                    <Text style={styles.dateText}>
+                      {dayjs(customStart).format('DD MMM YYYY')}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
                 <View style={styles.dateField}>
                   <Text style={styles.dateLabel}>End Date</Text>
-                  <View style={styles.inputWrapper}>
-                    <Ionicons name="calendar-outline" size={18} color="#6B7280" style={styles.inputIcon} />
-                    <TextInput
-                      style={styles.input}
-                      value={customEnd}
-                      onChangeText={setCustomEnd}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor="#9CA3AF"
-                    />
-                  </View>
+                  <TouchableOpacity 
+                    style={styles.datePickerBtn}
+                    onPress={() => openDatePicker('end')}
+                  >
+                    <Ionicons name="calendar" size={18} color="#6B7280" />
+                    <Text style={styles.dateText}>
+                      {dayjs(customEnd).format('DD MMM YYYY')}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             )}
 
-            <TouchableOpacity style={styles.modalApplyBtn} onPress={() => { loadData(); setShowDatePicker(false); }}>
+            <TouchableOpacity style={styles.modalApplyBtn} onPress={() => { loadData(); setShowFilterModal(false); }}>
               <Ionicons name="checkmark" size={18} color="#fff" />
               <Text style={styles.modalApplyText}>Apply Filter</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={showCalendarPicker} transparent animationType="fade">
+        <Pressable style={styles.modalOverlay} onPress={() => setShowCalendarPicker(false)}>
+          <View style={styles.calendarModal}>
+            <View style={styles.calendarHeader}>
+              <Text style={styles.calendarTitle}>
+                Select {datePickerMode === 'start' ? 'Start' : 'End'} Date
+              </Text>
+              <TouchableOpacity onPress={() => setShowCalendarPicker(false)} style={styles.closeBtn}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <Calendar
+              current={datePickerMode === 'start' ? customStart : customEnd}
+              onDayPress={handleDateSelect}
+              markedDates={{
+                [datePickerMode === 'start' ? customStart : customEnd]: {
+                  selected: true,
+                  selectedColor: '#2563EB',
+                }
+              }}
+              minDate={datePickerMode === 'end' ? customStart : undefined}
+              theme={getCalendarTheme()}
+              style={styles.calendarInner}
+            />
+          </View>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -311,10 +380,9 @@ export default function MonthlyScreen() {
 
 const styles = StyleSheet.create({
   container:   { flex: 1, backgroundColor: '#F3F4F6' },
-  header:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  title:       { fontSize: 20, fontWeight: '700', color: '#111827' },
-  filterBtn:   { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-  filterBtnText: { fontSize: 13, color: '#2563EB', marginHorizontal: 6 },
+  header:      { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  filterBtn:   { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderWidth: 1, borderColor: '#BFDBFE' },
+  filterBtnText: { fontSize: 14, color: '#2563EB', marginHorizontal: 8, fontWeight: '600' },
   pillRow:     { paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   pill:        { alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, marginRight: 12, borderRadius: 12, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
   pillOn:      { backgroundColor: '#2563EB', borderColor: '#2563EB' },
@@ -342,8 +410,8 @@ const styles = StyleSheet.create({
   shareBtnText:{ color: '#fff', fontWeight: '600', fontSize: 15, marginLeft: 8 },
   empty:       { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText:   { fontSize: 14, color: '#9CA3AF' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalBox:     { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', padding: 0 },
+  modalBox:     { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
   modalHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   modalTitle:   { fontSize: 18, fontWeight: '600', color: '#111827' },
   filterOptions:{ marginBottom: 20 },
@@ -353,10 +421,42 @@ const styles = StyleSheet.create({
   filterOptionTextActive:{ color: '#2563EB', fontWeight: '500' },
   dateInputs:  { flexDirection: 'row', gap: 12, marginBottom: 20 },
   dateField:   { flex: 1 },
-  dateLabel:   { fontSize: 13, fontWeight: '500', color: '#374151', marginBottom: 8 },
-  inputWrapper:{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10 },
-  inputIcon:   { marginLeft: 12 },
-  input:       { flex: 1, padding: 12, fontSize: 14, color: '#111827' },
+  dateLabel:   { fontSize: 12, fontWeight: '600', color: '#64748B', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  datePickerBtn: {
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#F8FAFC', 
+    borderWidth: 1.5, 
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  dateText: { fontSize: 14, color: '#1E293B', marginLeft: 10 },
   modalApplyBtn:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2563EB', padding: 14, borderRadius: 12 },
   modalApplyText:{ color: '#fff', fontSize: 15, fontWeight: '600', marginLeft: 8 },
+  calendarModal: { 
+    backgroundColor: '#fff', 
+    borderRadius: 20, 
+    width: '90%',
+    maxWidth: 360,
+    alignSelf: 'center',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  calendarHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  calendarTitle: { fontSize: 16, fontWeight: '600', color: '#0F172A' },
+  closeBtn: { padding: 4 },
+  calendarInner: { borderRadius: 20 },
 });

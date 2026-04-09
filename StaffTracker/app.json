@@ -6,27 +6,56 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#2563EB"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.srcdesigns.StaffTracker",
+      "appVersion": "1.0.0",
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#2563EB"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": false,
+      "package": "com.srcdesigns.StaffTracker",
+      "versionCode": 1,
+      "versionName": "1.0.0",
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
+      "playStoreUrl": "https://play.google.com/store/apps/details?id=com.srcdesigns.StaffTracker"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-sqlite"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "stafftracker-app"
+      }
+    },
+    "privacy": "unlisted",
+    "category": "PRODUCTIVITY",
+    "keywords": [
+      "staff management",
+      "attendance tracker",
+      "salary calculator",
+      "household staff",
+      "maid management",
+      "employee tracker"
+    ],
+    "description": "StaffTracker is a comprehensive mobile app for managing household staff, tracking attendance, calculating salaries, and generating payslips. Perfect for homes with domestic help.",
+    "primaryColor": "#2563EB",
+    "backgroundColor": "#F8FAFC"
   }
 }

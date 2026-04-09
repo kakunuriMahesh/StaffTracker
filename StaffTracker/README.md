@@ -40,6 +40,10 @@ npx expo run:ios
 ```
 StaffTracker/
 ├── App.js                 # Main app with navigation setup
+├── app.json               # Expo configuration
+├── terms-and-conditions.html # Legal document
+├── privacy-policy.html     # Legal document
+├── PLAYSTORE_DEPLOYMENT.md # Play Store deployment guide
 ├── src/
 │   ├── database/
 │   │   └── db.js          # SQLite database operations
@@ -49,7 +53,8 @@ StaffTracker/
 │   │   ├── MonthlyScreen.js   # Monthly view (tab 3)
 │   │   ├── AddStaffScreen.js   # Add new staff
 │   │   ├── EditStaffScreen.js # Edit staff
-│   │   └── StaffDetailScreen.js # Staff details + attendance
+│   │   ├── StaffDetailScreen.js # Staff details + attendance
+│   │   └── ProfileScreen.js   # Profile & settings (tab 4)
 │   ├── components/
 │   │   ├── StaffCard.js
 │   │   └── AttendanceDot.js
@@ -94,13 +99,15 @@ StaffTracker/
 3. **View Monthly**: Go to Monthly tab → Select staff → View calendar and salary breakdown
 4. **Add Advance**: Open staff detail → Tap "Add Advance" → Enter amount and date
 5. **Share Payslip**: In Monthly tab → Tap "Share Payslip" → Choose app to share
+6. **Profile**: Go to Profile tab → View stats, read legal docs, rate/share app
 
 ## Screenshots
 
-The app has three main tabs:
+The app has four main tabs:
 - **Staff**: List of all staff with today's attendance status
 - **Today**: Mark and view today's attendance
 - **Monthly**: Calendar view with salary calculations
+- **Profile**: App info, stats, legal links, and support options
 
 ## License
 

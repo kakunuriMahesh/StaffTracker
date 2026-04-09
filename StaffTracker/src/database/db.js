@@ -173,3 +173,7 @@ export const getAdvancesForStaff = async (staffId) => {
     [staffId]
   );
 };
+
+export const getAllAdvances = async () => {
+  return await db.getAllAsync('SELECT * FROM advances ORDER BY date DESC');
+};

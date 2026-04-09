@@ -14,6 +14,7 @@ import MonthlyScreen     from './src/screens/MonthlyScreen';
 import AddStaffScreen    from './src/screens/AddStaffScreen';
 import EditStaffScreen   from './src/screens/EditStaffScreen';
 import StaffDetailScreen from './src/screens/StaffDetailScreen';
+import ProfileScreen     from './src/screens/ProfileScreen';
 
 const Tab   = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -45,6 +46,8 @@ function Tabs() {
             iconName = focused ? 'today' : 'today-outline';
           } else if (route.name === 'MonthlyTab') {
             iconName = focused ? 'calendar' : 'calendar-outline';
+          } else if (route.name === 'ProfileTab') {
+            iconName = focused ? 'person' : 'person-outline';
           }
           return <Ionicons name={iconName} size={22} color={color} />;
         },
@@ -53,6 +56,7 @@ function Tabs() {
       <Tab.Screen name="HomeTab"    component={HomeScreen}    options={{ tabBarLabel: 'Staff' }} />
       <Tab.Screen name="DailyTab"   component={DailyScreen}   options={{ tabBarLabel: 'Today' }} />
       <Tab.Screen name="MonthlyTab" component={MonthlyScreen} options={{ tabBarLabel: 'Monthly' }} />
+      <Tab.Screen name="ProfileTab" component={ProfileScreen} options={{ tabBarLabel: 'Profile' }} />
     </Tab.Navigator>
   );
 }
@@ -85,9 +89,9 @@ export default function App() {
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerBackTitle: 'Back' }}>
           <Stack.Screen name="Tabs"        component={Tabs}             options={{ headerShown: false }} />
-          <Stack.Screen name="AddStaff"    component={AddStaffScreen}   options={{ title: 'Add Staff', headerStyle: { backgroundColor: '#fff' } }} />
-          <Stack.Screen name="EditStaff"   component={EditStaffScreen}  options={{ title: 'Edit Staff', headerStyle: { backgroundColor: '#fff' } }} />
-          <Stack.Screen name="StaffDetail" component={StaffDetailScreen} options={{ title: 'Staff Details', headerStyle: { backgroundColor: '#fff' } }} />
+          <Stack.Screen name="AddStaff"    component={AddStaffScreen}   options={{ headerShown: false }} />
+          <Stack.Screen name="EditStaff"   component={EditStaffScreen}  options={{ headerShown: false }} />
+          <Stack.Screen name="StaffDetail" component={StaffDetailScreen} options={{ headerShown: false }} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>
