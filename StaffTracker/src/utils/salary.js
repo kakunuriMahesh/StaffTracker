@@ -6,9 +6,18 @@ export const calculateSalary = (staff, attendanceRecords, advanceRecords, year, 
   const leave    = attendanceRecords.filter(r => r.status === 'L').length;
   const absent   = attendanceRecords.filter(r => r.status === 'A').length;
   const unmarked = daysInMonth - present - leave - absent;
-  const paidDays = present + leave;
-
-  const grossSalary   = parseFloat(((staff.salary / daysInMonth) * paidDays).toFixed(2));
+  
+  let grossSalary;
+  let paidDays;
+  
+  if (staff.salary_type === 'daily') {
+    paidDays = present;
+    grossSalary = parseFloat((present * staff.salary).toFixed(2));
+  } else {
+    paidDays = present + leave;
+    grossSalary = parseFloat(((staff.salary / daysInMonth) * paidDays).toFixed(2));
+  }
+  
   const totalAdvances = advanceRecords.reduce((sum, a) => sum + a.amount, 0);
   const netPayable    = parseFloat((grossSalary - totalAdvances).toFixed(2));
 

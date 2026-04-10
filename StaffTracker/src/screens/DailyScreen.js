@@ -1,12 +1,12 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Modal, TextInput, Pressable, Alert, TouchableWithoutFeedback } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
 import { getAllStaff, getAttendanceByDate, markAttendance } from '../database/db';
+import { Calendar } from 'react-native-calendars';
 
-const TODAY = dayjs().format('YYYY-MM-DD');
 const S_BG  = { P: '#D1FAE5', A: '#FEE2E2', L: '#FEF3C7' };
 const S_FG  = { P: '#065F46', A: '#991B1B', L: '#92400E' };
 const S_ICON = { P: 'checkmark-circle', A: 'close-circle', L: 'time-outline' };
@@ -14,16 +14,29 @@ const S_ICON = { P: 'checkmark-circle', A: 'close-circle', L: 'time-outline' };
 export default function DailyScreen() {
   const [staff,      setStaff]      = useState([]);
   const [attendance, setAttendance] = useState({});
+  const [notes, setNotes] = useState({});
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [selectedStaff, setSelectedStaff] = useState(null);
+  const [noteText, setNoteText] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  const [marking, setMarking] = useState({});
+  const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const insets = useSafeAreaInsets();
 
   const load = useCallback(async () => {
     const list = await getAllStaff();
-    const records = await getAttendanceByDate(TODAY);
-    const map = {};
-    records.forEach(r => { map[r.staff_id] = r.status; });
+    const records = await getAttendanceByDate(selectedDate);
+    const attMap = {};
+    const noteMap = {};
+    records.forEach(r => { 
+      attMap[r.staff_id] = r.status;
+      if (r.note) noteMap[r.staff_id] = r.note;
+    });
     setStaff(list);
-    setAttendance(map);
-  }, []);
+    setAttendance(attMap);
+    setNotes(noteMap);
+  }, [selectedDate]);
 
   useFocusEffect(
     useCallback(() => {
@@ -32,8 +45,55 @@ export default function DailyScreen() {
   );
 
   const mark = async (staffId, status) => {
-    await markAttendance(staffId, TODAY, status);
-    setAttendance(prev => ({ ...prev, [staffId]: status }));
+    if (marking[staffId]) return;
+    
+    setMarking(prev => ({ ...prev, [staffId]: true }));
+    try {
+      await markAttendance(staffId, selectedDate, status, notes[staffId] || '');
+      setAttendance(prev => ({ ...prev, [staffId]: status }));
+    } catch (error) {
+      console.error('Error marking attendance:', error);
+      Alert.alert('Error', 'Failed to mark attendance');
+    } finally {
+      setMarking(prev => ({ ...prev, [staffId]: false }));
+    }
+  };
+
+  const openNoteModal = (item) => {
+    setSelectedStaff(item);
+    setNoteText(notes[item.id] || '');
+    setShowNoteModal(true);
+  };
+
+  const saveNote = async () => {
+    if (!selectedStaff || savingNote) return;
+    
+    setSavingNote(true);
+    
+    try {
+      const currentStatus = attendance[selectedStaff.id] || 'P';
+      const noteToSave = noteText.trim() || '';
+      
+      await markAttendance(selectedStaff.id, selectedDate, currentStatus, noteToSave);
+      
+      if (noteToSave) {
+        setNotes(prev => ({ ...prev, [selectedStaff.id]: noteToSave }));
+      } else {
+        const newNotes = { ...notes };
+        delete newNotes[selectedStaff.id];
+        setNotes(newNotes);
+      }
+      
+      Alert.alert('Success', 'Note saved');
+      setShowNoteModal(false);
+      setSelectedStaff(null);
+      setNoteText('');
+    } catch (error) {
+      console.log('Save note error:', error);
+      Alert.alert('Error', 'Failed to save note. Try again.');
+    } finally {
+      setSavingNote(false);
+    }
   };
 
   const present  = Object.values(attendance).filter(s => s === 'P').length;
@@ -55,6 +115,7 @@ export default function DailyScreen() {
 
   const renderItem = ({ item }) => {
     const cur = attendance[item.id];
+    const hasNote = notes[item.id];
     return (
       <View style={styles.row}>
         <View style={styles.avatar}>
@@ -83,6 +144,16 @@ export default function DailyScreen() {
               />
             </TouchableOpacity>
           ))}
+          <TouchableOpacity 
+            onPress={() => openNoteModal(item)}
+            style={[styles.noteBtn, hasNote && styles.noteBtnActive]}
+          >
+            <Ionicons 
+              name={hasNote ? 'document-text' : 'document-text-outline'} 
+              size={18} 
+              color={hasNote ? '#2563EB' : '#9CA3AF'} 
+            />
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -91,12 +162,13 @@ export default function DailyScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Today's Attendance</Text>
-          <View style={styles.dateRow}>
-            <Ionicons name="calendar-outline" size={14} color="#6B7280" />
-            <Text style={styles.date}>{dayjs().format('dddd, DD MMM YYYY')}</Text>
-          </View>
+        <View style={styles.headerLeft}>
+          <Text style={styles.title}>Attendance</Text>
+          <TouchableOpacity style={styles.dateButton} onPress={() => setShowDatePicker(true)}>
+            <Ionicons name="calendar-outline" size={14} color="#2563EB" />
+            <Text style={styles.dateText}>{dayjs(selectedDate).format('DD MMM YYYY')}</Text>
+            <Ionicons name="chevron-down" size={14} color="#2563EB" />
+          </TouchableOpacity>
         </View>
         <View style={styles.headerStats}>
           <Text style={styles.headerStatNum}>{staff.length}</Text>
@@ -154,6 +226,66 @@ export default function DailyScreen() {
           renderItem={renderItem}
         />
       )}
+
+      <Modal visible={showNoteModal} transparent animationType="fade">
+        <Pressable style={styles.modalOverlay} onPress={() => setShowNoteModal(false)}>
+          <Pressable style={styles.modalBox} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Note</Text>
+              <TouchableOpacity onPress={() => setShowNoteModal(false)}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.noteInput}
+              placeholder="Enter note for today..."
+              placeholderTextColor="#9CA3AF"
+              value={noteText}
+              onChangeText={setNoteText}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+            <View style={styles.modalBtns}>
+              <TouchableOpacity 
+                style={styles.modalCancelBtn}
+                onPress={() => setShowNoteModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.modalSaveBtn}
+                onPress={saveNote}
+              >
+                <Text style={styles.modalSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      
+      <Modal visible={showDatePicker} transparent animationType="fade">
+        <Pressable style={styles.modalOverlay} onPress={() => setShowDatePicker(false)}>
+          <Pressable style={styles.calendarModal} onPress={() => {}}>
+            <Calendar
+              current={selectedDate}
+              onDayPress={(day) => {
+                setSelectedDate(day.dateString);
+                setShowDatePicker(false);
+              }}
+              markedDates={{
+                [selectedDate]: { selected: true, selectedColor: '#2563EB' }
+              }}
+              theme={{
+                todayTextColor: '#2563EB',
+                arrowColor: '#2563EB',
+                backgroundColor: '#fff',
+                calendarBackground: '#fff',
+              }}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -162,6 +294,9 @@ const styles = StyleSheet.create({
   container:    { flex: 1, backgroundColor: '#F3F4F6' },
   header:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   title:        { fontSize: 20, fontWeight: '700', color: '#111827' },
+  headerLeft:   { flex: 1 },
+  dateButton:   { flexDirection: 'row', alignItems: 'center', marginTop: 6, backgroundColor: '#EFF6FF', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, alignSelf: 'flex-start' },
+  dateText:     { fontSize: 13, color: '#2563EB', fontWeight: '500', marginHorizontal: 4 },
   dateRow:      { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   date:         { fontSize: 13, color: '#6B7280', marginLeft: 4 },
   headerStats:   { alignItems: 'center', backgroundColor: '#EFF6FF', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
@@ -182,6 +317,19 @@ const styles = StyleSheet.create({
   role:         { fontSize: 12, color: '#6B7280', marginLeft: 4 },
   btnGroup:     { flexDirection: 'row', gap: 8 },
   btn:          { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB' },
+  noteBtn:      { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB' },
+  noteBtnActive: { backgroundColor: '#EFF6FF', borderColor: '#2563EB' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalBox:     { backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '100%', maxWidth: 400 },
+  modalHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalTitle:   { fontSize: 18, fontWeight: '600', color: '#111827' },
+  noteInput:    { backgroundColor: '#F9FAFB', borderRadius: 12, padding: 14, fontSize: 15, color: '#111827', minHeight: 100, borderWidth: 1, borderColor: '#E5E7EB' },
+  modalBtns:    { flexDirection: 'row', gap: 12, marginTop: 16 },
+  modalCancelBtn:{ flex: 1, padding: 14, borderRadius: 12, backgroundColor: '#F3F4F6', alignItems: 'center' },
+  modalCancelText:{ fontSize: 15, fontWeight: '600', color: '#6B7280' },
+  modalSaveBtn: { flex: 1, padding: 14, borderRadius: 12, backgroundColor: '#2563EB', alignItems: 'center' },
+  modalSaveText:{ fontSize: 15, fontWeight: '600', color: '#fff' },
+  calendarModal: { backgroundColor: '#fff', borderRadius: 20, padding: 16, width: '100%', maxWidth: 400 },
   empty:        { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   emptyIconContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
   emptyTitle:   { fontSize: 18, fontWeight: '600', color: '#374151', marginBottom: 8 },

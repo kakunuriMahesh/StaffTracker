@@ -57,7 +57,7 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.role}>{item.position}</Text>
             <Text style={styles.separator}>·</Text>
             <Text style={styles.salary}>₹{item.salary}</Text>
-            <Text style={styles.salaryFreq}>/{item.salary_type === 'weekly' ? 'wk' : 'mo'}</Text>
+            <Text style={styles.salaryFreq}>/{item.salary_type === 'daily' ? 'day' : 'mo'}</Text>
           </View>
         </View>
         <View style={[styles.badge, status ? { backgroundColor: STATUS_COLOR[status] } : styles.badgeEmpty]}>

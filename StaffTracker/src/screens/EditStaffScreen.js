@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Pressable } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Pressable, Platform, FlatList, Keyboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
 import { getStaffById, updateStaff } from '../database/db';
 import { Calendar } from 'react-native-calendars';
 
-const ROLES = ['Maid', 'Cook', 'Driver', 'Gardener', 'Security', 'Watchman', 'Other'];
+const DEFAULT_ROLES = ['Maid', 'Cook', 'Driver', 'Gardener', 'Security', 'Watchman', 'Other'];
 const DURATION_TYPES = [
-  { key: 'weekly', label: 'Weekly' },
+  { key: 'daily', label: 'Daily' },
   { key: 'monthly', label: 'Monthly' },
   { key: 'manual', label: 'Manual' },
 ];
@@ -18,15 +18,21 @@ export default function EditStaffScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [position, setPosition] = useState('Maid');
+  const [customPosition, setCustomPosition] = useState('');
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+  const [filteredRoles, setFilteredRoles] = useState(DEFAULT_ROLES);
   const [phone, setPhone] = useState('');
   const [salary, setSalary] = useState('');
   const [joinDate, setJoinDate] = useState('');
   const [salaryType, setSalaryType] = useState('monthly');
   const [salaryStartDate, setSalaryStartDate] = useState('');
   const [salaryEndDate, setSalaryEndDate] = useState('');
+  const [sundayHoliday, setSundayHoliday] = useState(false);
+  const [note, setNote] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerMode, setDatePickerMode] = useState('join');
   const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const loadStaff = async () => {
@@ -40,6 +46,8 @@ export default function EditStaffScreen({ route, navigation }) {
         setSalaryType(s.salary_type || 'monthly');
         setSalaryStartDate(s.salary_start_date || '');
         setSalaryEndDate(s.salary_end_date || '');
+        setSundayHoliday(s.sunday_holiday === 1);
+        setNote(s.note || '');
       }
     };
     loadStaff();
@@ -109,6 +117,33 @@ export default function EditStaffScreen({ route, navigation }) {
     return marked;
   };
 
+  const handleRoleSearch = (text) => {
+    setCustomPosition(text);
+    if (text.trim() === '') {
+      setFilteredRoles(DEFAULT_ROLES);
+    } else {
+      const filtered = DEFAULT_ROLES.filter(role => 
+        role.toLowerCase().includes(text.toLowerCase())
+      );
+      setFilteredRoles(filtered.length > 0 ? filtered : DEFAULT_ROLES);
+    }
+  };
+
+  const handleRoleSelect = (role) => {
+    setPosition(role);
+    setCustomPosition('');
+    setFilteredRoles(DEFAULT_ROLES);
+    setShowRoleDropdown(false);
+  };
+
+  const handleCustomRoleSubmit = () => {
+    if (customPosition.trim()) {
+      setPosition(customPosition.trim());
+      setFilteredRoles(DEFAULT_ROLES);
+      setShowRoleDropdown(false);
+    }
+  };
+
   const validateForm = () => {
     const newErrors = {};
     
@@ -151,6 +186,8 @@ export default function EditStaffScreen({ route, navigation }) {
   };
 
   const save = async () => {
+    if (saving) return;
+    
     if (!validateForm()) {
       const errorList = Object.values(errors).filter(Boolean);
       if (errorList.length > 0) {
@@ -159,6 +196,7 @@ export default function EditStaffScreen({ route, navigation }) {
       return;
     }
 
+    setSaving(true);
     try {
       await updateStaff(
         staffId, 
@@ -168,18 +206,22 @@ export default function EditStaffScreen({ route, navigation }) {
         phone, 
         salaryType, 
         salaryStartDate || null, 
-        salaryEndDate || null
+        salaryEndDate || null,
+        sundayHoliday,
+        note.trim()
       );
       navigation.goBack();
     } catch (error) {
       console.error('Error updating staff:', error);
       Alert.alert('Error', 'Failed to update staff. Please try again.');
+    } finally {
+      setSaving(false);
     }
   };
 
   const getSalaryLabel = () => {
     switch (salaryType) {
-      case 'weekly': return 'Weekly Salary (₹)';
+      case 'daily': return 'Daily Wage (₹)';
       case 'monthly': return 'Monthly Salary (₹)';
       case 'manual': return 'Salary for Period (₹)';
       default: return 'Salary (₹)';
@@ -231,26 +273,73 @@ export default function EditStaffScreen({ route, navigation }) {
 
         <View style={[styles.inputGroup, styles.cardStyle]}>
           <Text style={styles.label}>Role</Text>
-          <View style={styles.roleContainer}>
-            {ROLES.map((r, index) => (
-              <TouchableOpacity 
-                key={r} 
-                onPress={() => setPosition(r)}
-                style={[
-                  styles.roleChip, 
-                  position === r && styles.roleChipActive,
-                  index === ROLES.length - 1 && styles.roleChipLast
-                ]}
-              >
-                <Ionicons 
-                  name={position === r ? 'radio-button-on' : 'radio-button-off'} 
-                  size={16} 
-                  color={position === r ? '#fff' : '#9CA3AF'} 
-                />
-                <Text style={[styles.roleText, position === r && styles.roleTextActive]}>{r}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <TouchableOpacity 
+            style={[styles.roleDropdown, errors.position && styles.inputError]}
+            onPress={() => setShowRoleDropdown(!showRoleDropdown)}
+          >
+            <View style={styles.roleDropdownContent}>
+              <Ionicons name="briefcase" size={20} color="#6B7280" style={styles.inputIcon} />
+              <Text style={[styles.roleDropdownText, !position && styles.placeholderText]}>
+                {position || 'Select role'}
+              </Text>
+            </View>
+            <Ionicons name={showRoleDropdown ? 'chevron-up' : 'chevron-down'} size={20} color="#9CA3AF" />
+          </TouchableOpacity>
+          {showRoleDropdown && (
+            <View style={styles.dropdownContainer}>
+              <TextInput
+                style={styles.roleInput}
+                placeholder="Type to search or enter custom role"
+                placeholderTextColor="#9CA3AF"
+                value={customPosition}
+                onChangeText={(text) => {
+                  setCustomPosition(text);
+                  if (text.trim() === '') {
+                    setFilteredRoles(DEFAULT_ROLES);
+                  } else {
+                    const filtered = DEFAULT_ROLES.filter(role => 
+                      role.toLowerCase().includes(text.toLowerCase())
+                    );
+                    setFilteredRoles(filtered.length > 0 ? filtered : []);
+                  }
+                }}
+                autoFocus
+              />
+              <ScrollView style={styles.dropdownList} nestedScrollEnabled>
+                {filteredRoles.map((role) => (
+                  <TouchableOpacity
+                    key={role}
+                    style={[styles.dropdownItem, position === role && styles.dropdownItemActive]}
+                    onPress={() => {
+                      setPosition(role);
+                      setCustomPosition('');
+                      setFilteredRoles(DEFAULT_ROLES);
+                      setShowRoleDropdown(false);
+                    }}
+                  >
+                    <Text style={[styles.dropdownItemText, position === role && styles.dropdownItemTextActive]}>
+                      {role}
+                    </Text>
+                    {position === role && <Ionicons name="checkmark" size={18} color="#2563EB" />}
+                  </TouchableOpacity>
+                ))}
+                {customPosition.trim() && filteredRoles.length === 0 && (
+                  <TouchableOpacity
+                    style={styles.customRoleItem}
+                    onPress={() => {
+                      setPosition(customPosition.trim());
+                      setCustomPosition('');
+                      setFilteredRoles(DEFAULT_ROLES);
+                      setShowRoleDropdown(false);
+                    }}
+                  >
+                    <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
+                    <Text style={styles.customRoleText}>Select "{customPosition.trim()}"</Text>
+                  </TouchableOpacity>
+                )}
+              </ScrollView>
+            </View>
+          )}
         </View>
 
         <View style={[styles.inputGroup, styles.cardStyle]}>
@@ -296,9 +385,10 @@ export default function EditStaffScreen({ route, navigation }) {
                   if (type.key === 'monthly') {
                     setSalaryStartDate(dayjs().startOf('month').format('YYYY-MM-DD'));
                     setSalaryEndDate(dayjs().endOf('month').format('YYYY-MM-DD'));
-                  } else if (type.key === 'weekly') {
+                  } else if (type.key === 'daily') {
                     setSalaryStartDate('');
                     setSalaryEndDate('');
+                    setSundayHoliday(false);
                   }
                 }}
                 style={[styles.durationBtn, salaryType === type.key && styles.durationBtnActive]}
@@ -315,6 +405,26 @@ export default function EditStaffScreen({ route, navigation }) {
             ))}
           </View>
         </View>
+
+        {salaryType === 'monthly' && (
+          <View style={[styles.cardStyle, styles.sundayHolidayCard]}>
+            <View style={styles.sundayHolidayRow}>
+              <View style={styles.sundayHolidayInfo}>
+                <Ionicons name="calendar-outline" size={22} color="#6366F1" />
+                <View style={styles.sundayHolidayText}>
+                  <Text style={styles.sundayHolidayLabel}>Sunday Holiday</Text>
+                  <Text style={styles.sundayHolidayDesc}>Sundays will be treated as non-working days</Text>
+                </View>
+              </View>
+              <TouchableOpacity 
+                style={[styles.toggleBtn, sundayHoliday && styles.toggleBtnActive]}
+                onPress={() => setSundayHoliday(!sundayHoliday)}
+              >
+                <View style={[styles.toggleThumb, sundayHoliday && styles.toggleThumbActive]} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {salaryType === 'manual' && (
           <View style={[styles.dateRangeContainer, styles.cardStyle]}>
@@ -365,8 +475,27 @@ export default function EditStaffScreen({ route, navigation }) {
           </View>
           {errors.salary && <Text style={styles.errorText}>{errors.salary}</Text>}
           {salaryType !== 'manual' && salary.length > 0 && !errors.salary && (
-            <Text style={styles.salaryHint}>₹{parseFloat(salary || 0).toLocaleString('en-IN')} {salaryType === 'weekly' ? 'per week' : 'per month'}</Text>
+            <Text style={styles.salaryHint}>
+              ₹{parseFloat(salary || 0).toLocaleString('en-IN')} {salaryType === 'daily' ? 'per day' : 'per month'}
+            </Text>
           )}
+        </View>
+
+        <View style={[styles.inputGroup, styles.cardStyle]}>
+          <Text style={styles.label}>Note (Optional)</Text>
+          <View style={styles.noteWrapper}>
+            <Ionicons name="document-text" size={20} color="#6B7280" style={styles.inputIcon} />
+            <TextInput 
+              style={[styles.input, styles.noteInput]} 
+              value={note} 
+              onChangeText={setNote}
+              placeholder="Add any note for this staff..."
+              placeholderTextColor="#9CA3AF"
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+          </View>
         </View>
 
         <TouchableOpacity style={styles.saveBtn} onPress={save}>
@@ -539,4 +668,150 @@ const styles = StyleSheet.create({
   calendarTitle: { fontSize: 16, fontWeight: '600', color: '#0F172A' },
   closeBtn: { padding: 4 },
   calendar: { borderRadius: 20 },
+  roleDropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    minHeight: 52,
+    paddingHorizontal: 12,
+  },
+  roleDropdownContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  roleDropdownText: {
+    fontSize: 15,
+    color: '#1E293B',
+    flex: 1,
+  },
+  dropdownContainer: {
+    marginTop: 10,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    overflow: 'hidden',
+  },
+  roleInput: {
+    fontSize: 15,
+    color: '#1E293B',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+  },
+  dropdownList: {
+    maxHeight: 200,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  dropdownItemActive: {
+    backgroundColor: '#EFF6FF',
+  },
+  dropdownItemText: {
+    fontSize: 15,
+    color: '#374151',
+  },
+  dropdownItemTextActive: {
+    color: '#2563EB',
+    fontWeight: '600',
+  },
+  customRoleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    backgroundColor: '#F0F9FF',
+  },
+  customRoleText: {
+    fontSize: 14,
+    color: '#2563EB',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  sundayHolidayCard: {
+    marginBottom: 12,
+    backgroundColor: '#F8FAFC',
+  },
+  sundayHolidayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sundayHolidayInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  sundayHolidayText: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  sundayHolidayLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  sundayHolidayDesc: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  toggleBtn: {
+    width: 50,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#E2E8F0',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleBtnActive: {
+    backgroundColor: '#6366F1',
+  },
+  toggleThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  toggleThumbActive: {
+    alignSelf: 'flex-end',
+  },
+  noteWrapper: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    minHeight: 100,
+  },
+  noteInput: {
+    paddingTop: 12,
+    minHeight: 100,
+  },
 });

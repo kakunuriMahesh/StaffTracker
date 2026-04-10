@@ -50,17 +50,24 @@ export default function StaffDetailScreen({ route, navigation }) {
   );
 
   const markedDates = {};
+  const attendanceNotes = {};
   attendance.forEach(r => {
     markedDates[r.date] = {
       selected: true,
       selectedColor:     STATUS_BG[r.status],
       selectedTextColor: STATUS_FG[r.status],
     };
+    if (r.note) {
+      attendanceNotes[r.date] = r.note;
+    }
   });
+
+  const noteDates = Object.keys(attendanceNotes);
+  const hasNotes = noteDates.length > 0;
 
   const getDurationLabel = (type) => {
     switch (type) {
-      case 'weekly': return 'Weekly';
+      case 'daily': return 'Daily';
       case 'monthly': return 'Monthly';
       case 'manual': return 'Custom Period';
       default: return 'Monthly';
@@ -69,7 +76,7 @@ export default function StaffDetailScreen({ route, navigation }) {
 
   const getDurationIcon = (type) => {
     switch (type) {
-      case 'weekly': return 'calendar';
+      case 'daily': return 'today';
       case 'monthly': return 'calendar-outline';
       case 'manual': return 'time-outline';
       default: return 'calendar-outline';
@@ -168,6 +175,27 @@ export default function StaffDetailScreen({ route, navigation }) {
             </View>
           </View>
 
+          {(staff.sunday_holiday === 1 || staff.note) && (
+            <View style={styles.infoCard}>
+              {staff.sunday_holiday === 1 && (
+                <View style={styles.infoRow}>
+                  <View style={styles.infoIcon}>
+                    <Ionicons name="calendar-outline" size={16} color="#6366F1" />
+                  </View>
+                  <Text style={styles.infoText}>Sunday holiday enabled</Text>
+                </View>
+              )}
+              {staff.note && (
+                <View style={styles.infoRow}>
+                  <View style={styles.infoIcon}>
+                    <Ionicons name="document-text-outline" size={16} color="#6B7280" />
+                  </View>
+                  <Text style={styles.infoText}>{staff.note}</Text>
+                </View>
+              )}
+            </View>
+          )}
+
           <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
             <Ionicons name="trash-outline" size={18} color="#DC2626" />
             <Text style={styles.deleteBtnText}>Delete Staff</Text>
@@ -196,17 +224,26 @@ export default function StaffDetailScreen({ route, navigation }) {
                 <Text style={[styles.summaryVal, { color: '#92400E' }]}>{summary.leave}</Text>
                 <Text style={[styles.summaryLbl, { color: '#92400E' }]}>Leave</Text>
               </View>
-              <View style={[styles.summaryBox, { backgroundColor: '#F3F4F6' }]}>
-                <Ionicons name="remove-circle-outline" size={20} color="#6B7280" style={{ marginBottom: 4 }} />
-                <Text style={[styles.summaryVal, { color: '#6B7280' }]}>{summary.unmarked}</Text>
-                <Text style={[styles.summaryLbl, { color: '#6B7280' }]}>Unmarked</Text>
-              </View>
+              {staff.salary_type !== 'daily' && (
+                <View style={[styles.summaryBox, { backgroundColor: '#F3F4F6' }]}>
+                  <Ionicons name="remove-circle-outline" size={20} color="#6B7280" style={{ marginBottom: 4 }} />
+                  <Text style={[styles.summaryVal, { color: '#6B7280' }]}>{summary.unmarked}</Text>
+                  <Text style={[styles.summaryLbl, { color: '#6B7280' }]}>Unmarked</Text>
+                </View>
+              )}
             </View>
             <View style={styles.salaryBreakdown}>
-              <View style={styles.breakRow}>
-                <Text style={styles.breakLabel}>Paid days ({summary.paidDays} / {summary.daysInMonth})</Text>
-                <Text style={styles.breakValue}>₹{summary.grossSalary}</Text>
-              </View>
+              {staff.salary_type === 'daily' ? (
+                <View style={styles.breakRow}>
+                  <Text style={styles.breakLabel}>Days worked ({summary.paidDays} days × ₹{staff.salary})</Text>
+                  <Text style={styles.breakValue}>₹{summary.grossSalary}</Text>
+                </View>
+              ) : (
+                <View style={styles.breakRow}>
+                  <Text style={styles.breakLabel}>Paid days ({summary.paidDays} / {summary.daysInMonth})</Text>
+                  <Text style={styles.breakValue}>₹{summary.grossSalary}</Text>
+                </View>
+              )}
               <View style={styles.breakRow}>
                 <Text style={styles.breakLabel}>Advances deducted</Text>
                 <Text style={[styles.breakValue, { color: '#DC2626' }]}>- ₹{summary.totalAdvances}</Text>
@@ -243,6 +280,24 @@ export default function StaffDetailScreen({ route, navigation }) {
             }}
           />
         </View>
+
+        {hasNotes && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="document-text-outline" size={18} color="#111827" />
+              <Text style={styles.sectionTitle}>Notes</Text>
+            </View>
+            {noteDates.map(date => (
+              <View key={date} style={styles.noteItem}>
+                <View style={styles.noteDateRow}>
+                  <Ionicons name="calendar-outline" size={14} color="#6B7280" />
+                  <Text style={styles.noteDate}>{dayjs(date).format('DD MMM YYYY')}</Text>
+                </View>
+                <Text style={styles.noteText}>{attendanceNotes[date]}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -344,6 +399,10 @@ const styles = StyleSheet.create({
   salaryDivider: { width: 1, backgroundColor: '#E5E7EB', marginHorizontal: 16 },
   salaryRight: { alignItems: 'center', justifyContent: 'center' },
   salaryType: { fontSize: 13, fontWeight: '500', color: '#2563EB', marginTop: 4 },
+  infoCard: { backgroundColor: '#F0F9FF', borderRadius: 12, padding: 14, width: '100%', marginBottom: 16 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  infoIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  infoText: { fontSize: 13, color: '#374151', flex: 1 },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: '#FEE2E2', backgroundColor: '#FEF2F2' },
   deleteBtnText: { fontSize: 13, fontWeight: '500', color: '#DC2626', marginLeft: 6 },
   section: { backgroundColor: '#fff', margin: 16, marginTop: 0, borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 },
@@ -380,4 +439,8 @@ const styles = StyleSheet.create({
   modalCancelText: { fontWeight: '600', color: '#6B7280' },
   modalSave: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2563EB', padding: 14, borderRadius: 10 },
   modalSaveText: { fontWeight: '600', color: '#fff' },
+  noteItem: { backgroundColor: '#F9FAFB', borderRadius: 10, padding: 12, marginBottom: 10 },
+  noteDateRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  noteDate: { fontSize: 12, color: '#6B7280', marginLeft: 6 },
+  noteText: { fontSize: 14, color: '#374151', lineHeight: 20 },
 });

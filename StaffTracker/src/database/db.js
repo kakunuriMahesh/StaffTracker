@@ -15,7 +15,9 @@ export const initDatabase = async () => {
       salary_start_date TEXT,
       salary_end_date TEXT,
       phone TEXT,
-      join_date TEXT NOT NULL
+      join_date TEXT NOT NULL,
+      sunday_holiday INTEGER DEFAULT 0,
+      note TEXT
     );
 
     CREATE TABLE IF NOT EXISTS attendance (
@@ -23,6 +25,7 @@ export const initDatabase = async () => {
       staff_id INTEGER NOT NULL,
       date TEXT NOT NULL,
       status TEXT NOT NULL,
+      note TEXT,
       FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE
     );
 
@@ -37,6 +40,10 @@ export const initDatabase = async () => {
   `);
   
   try {
+    await db.runAsync('ALTER TABLE attendance ADD COLUMN note TEXT');
+  } catch (e) {}
+  
+  try {
     await db.runAsync('ALTER TABLE staff ADD COLUMN salary_type TEXT DEFAULT "monthly"');
   } catch (e) {}
   try {
@@ -45,16 +52,22 @@ export const initDatabase = async () => {
   try {
     await db.runAsync('ALTER TABLE staff ADD COLUMN salary_end_date TEXT');
   } catch (e) {}
+  try {
+    await db.runAsync('ALTER TABLE staff ADD COLUMN sunday_holiday INTEGER DEFAULT 0');
+  } catch (e) {}
+  try {
+    await db.runAsync('ALTER TABLE staff ADD COLUMN note TEXT');
+  } catch (e) {}
   
   return db;
 };
 
 export const getDb = () => db;
 
-export const addStaff = async (name, position, salary, phone, joinDate, salaryType = 'monthly', salaryStartDate = null, salaryEndDate = null) => {
+export const addStaff = async (name, position, salary, phone, joinDate, salaryType = 'monthly', salaryStartDate = null, salaryEndDate = null, sundayHoliday = false, note = '') => {
   const result = await db.runAsync(
-    'INSERT INTO staff (name, position, salary, salary_type, salary_start_date, salary_end_date, phone, join_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [name, position, salary, salaryType, salaryStartDate, salaryEndDate, phone, joinDate]
+    'INSERT INTO staff (name, position, salary, salary_type, salary_start_date, salary_end_date, phone, join_date, sunday_holiday, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [name, position, salary, salaryType, salaryStartDate, salaryEndDate, phone, joinDate, sundayHoliday ? 1 : 0, note]
   );
   return result.lastInsertRowId;
 };
@@ -67,10 +80,10 @@ export const getStaffById = async (id) => {
   return await db.getFirstAsync('SELECT * FROM staff WHERE id = ?', [id]);
 };
 
-export const updateStaff = async (id, name, position, salary, phone, salaryType = 'monthly', salaryStartDate = null, salaryEndDate = null) => {
+export const updateStaff = async (id, name, position, salary, phone, salaryType = 'monthly', salaryStartDate = null, salaryEndDate = null, sundayHoliday = false, note = '') => {
   await db.runAsync(
-    'UPDATE staff SET name = ?, position = ?, salary = ?, phone = ?, salary_type = ?, salary_start_date = ?, salary_end_date = ? WHERE id = ?',
-    [name, position, salary, phone, salaryType, salaryStartDate, salaryEndDate, id]
+    'UPDATE staff SET name = ?, position = ?, salary = ?, phone = ?, salary_type = ?, salary_start_date = ?, salary_end_date = ?, sunday_holiday = ?, note = ? WHERE id = ?',
+    [name, position, salary, phone, salaryType, salaryStartDate, salaryEndDate, sundayHoliday ? 1 : 0, note, id]
   );
 };
 
@@ -80,7 +93,9 @@ export const deleteStaff = async (id) => {
   await db.runAsync('DELETE FROM staff WHERE id = ?', [id]);
 };
 
-export const markAttendance = async (staffId, date, status) => {
+export const markAttendance = async (staffId, date, status, note = null) => {
+  const noteValue = note || '';
+  
   const existing = await db.getFirstAsync(
     'SELECT id FROM attendance WHERE staff_id = ? AND date = ?',
     [staffId, date]
@@ -88,13 +103,13 @@ export const markAttendance = async (staffId, date, status) => {
   
   if (existing) {
     await db.runAsync(
-      'UPDATE attendance SET status = ? WHERE staff_id = ? AND date = ?',
-      [status, staffId, date]
+      'UPDATE attendance SET status = ?, note = ? WHERE staff_id = ? AND date = ?',
+      [status, noteValue, staffId, date]
     );
   } else {
     await db.runAsync(
-      'INSERT INTO attendance (staff_id, date, status) VALUES (?, ?, ?)',
-      [staffId, date, status]
+      'INSERT INTO attendance (staff_id, date, status, note) VALUES (?, ?, ?, ?)',
+      [staffId, date, status, noteValue]
     );
   }
 };

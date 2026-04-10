@@ -77,17 +77,22 @@ export default function MonthlyScreen() {
     const leave = att.filter(r => r.status === 'L').length;
     const absent = att.filter(r => r.status === 'A').length;
     const unmarked = days - present - leave - absent;
-    const paidDays = present + leave;
     
-    let salaryToUse;
+    let paidDays, salaryToUse;
     const daysInMonth = now.daysInMonth();
     
-    if (staffSalaryType === 'weekly') {
+    if (staffSalaryType === 'daily') {
+      paidDays = present;
+      salaryToUse = present * selected.salary;
+    } else if (staffSalaryType === 'weekly') {
+      paidDays = present + leave;
       const weeklyDays = 7;
       salaryToUse = (selected.salary / weeklyDays) * paidDays;
     } else if (staffSalaryType === 'manual' || filterType === 'custom') {
+      paidDays = present + leave;
       salaryToUse = (selected.salary / daysInMonth) * paidDays;
     } else {
+      paidDays = present + leave;
       salaryToUse = (selected.salary / days) * paidDays;
     }
     
