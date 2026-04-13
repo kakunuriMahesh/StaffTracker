@@ -1,194 +1,245 @@
-import * as SQLite from 'expo-sqlite';
+import { loadStaff, saveStaff, loadAttendance, saveAttendance, loadAdvances, saveAdvances } from '../storage/localStorage';
 
-let db;
+let staffCache = null;
+let attendanceCache = null;
+let advancesCache = null;
+let isReady = false;
 
-export const initDatabase = async () => {
-  db = await SQLite.openDatabaseAsync('stafftracker.db');
-  
-  await db.execAsync(`
-    CREATE TABLE IF NOT EXISTS staff (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      position TEXT NOT NULL,
-      salary REAL NOT NULL,
-      salary_type TEXT DEFAULT 'monthly',
-      salary_start_date TEXT,
-      salary_end_date TEXT,
-      phone TEXT,
-      join_date TEXT NOT NULL,
-      sunday_holiday INTEGER DEFAULT 0,
-      note TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS attendance (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      staff_id INTEGER NOT NULL,
-      date TEXT NOT NULL,
-      status TEXT NOT NULL,
-      note TEXT,
-      FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS advances (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      staff_id INTEGER NOT NULL,
-      amount REAL NOT NULL,
-      date TEXT NOT NULL,
-      note TEXT,
-      FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE
-    );
-  `);
-  
-  try {
-    await db.runAsync('ALTER TABLE attendance ADD COLUMN note TEXT');
-  } catch (e) {}
-  
-  try {
-    await db.runAsync('ALTER TABLE staff ADD COLUMN salary_type TEXT DEFAULT "monthly"');
-  } catch (e) {}
-  try {
-    await db.runAsync('ALTER TABLE staff ADD COLUMN salary_start_date TEXT');
-  } catch (e) {}
-  try {
-    await db.runAsync('ALTER TABLE staff ADD COLUMN salary_end_date TEXT');
-  } catch (e) {}
-  try {
-    await db.runAsync('ALTER TABLE staff ADD COLUMN sunday_holiday INTEGER DEFAULT 0');
-  } catch (e) {}
-  try {
-    await db.runAsync('ALTER TABLE staff ADD COLUMN note TEXT');
-  } catch (e) {}
-  
-  return db;
-};
-
-export const getDb = () => db;
-
-export const addStaff = async (name, position, salary, phone, joinDate, salaryType = 'monthly', salaryStartDate = null, salaryEndDate = null, sundayHoliday = false, note = '') => {
-  const result = await db.runAsync(
-    'INSERT INTO staff (name, position, salary, salary_type, salary_start_date, salary_end_date, phone, join_date, sunday_holiday, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [name, position, salary, salaryType, salaryStartDate, salaryEndDate, phone, joinDate, sundayHoliday ? 1 : 0, note]
-  );
-  return result.lastInsertRowId;
-};
-
-export const getAllStaff = async () => {
-  return await db.getAllAsync('SELECT * FROM staff ORDER BY name');
-};
-
-export const getStaffById = async (id) => {
-  return await db.getFirstAsync('SELECT * FROM staff WHERE id = ?', [id]);
-};
-
-export const updateStaff = async (id, name, position, salary, phone, salaryType = 'monthly', salaryStartDate = null, salaryEndDate = null, sundayHoliday = false, note = '') => {
-  await db.runAsync(
-    'UPDATE staff SET name = ?, position = ?, salary = ?, phone = ?, salary_type = ?, salary_start_date = ?, salary_end_date = ?, sunday_holiday = ?, note = ? WHERE id = ?',
-    [name, position, salary, phone, salaryType, salaryStartDate, salaryEndDate, sundayHoliday ? 1 : 0, note, id]
-  );
-};
-
-export const deleteStaff = async (id) => {
-  await db.runAsync('DELETE FROM advances WHERE staff_id = ?', [id]);
-  await db.runAsync('DELETE FROM attendance WHERE staff_id = ?', [id]);
-  await db.runAsync('DELETE FROM staff WHERE id = ?', [id]);
-};
-
-export const markAttendance = async (staffId, date, status, note = null) => {
-  const noteValue = note || '';
-  
-  const existing = await db.getFirstAsync(
-    'SELECT id FROM attendance WHERE staff_id = ? AND date = ?',
-    [staffId, date]
-  );
-  
-  if (existing) {
-    await db.runAsync(
-      'UPDATE attendance SET status = ?, note = ? WHERE staff_id = ? AND date = ?',
-      [status, noteValue, staffId, date]
-    );
-  } else {
-    await db.runAsync(
-      'INSERT INTO attendance (staff_id, date, status, note) VALUES (?, ?, ?, ?)',
-      [staffId, date, status, noteValue]
-    );
+export async function initDatabase() {
+  if (isReady) {
+    return true;
   }
-};
-
-export const getAttendanceByDate = async (date) => {
-  return await db.getAllAsync(
-    'SELECT a.*, s.name, s.position FROM attendance a JOIN staff s ON a.staff_id = s.id WHERE a.date = ?',
-    [date]
-  );
-};
-
-export const getAttendanceByStaffAndMonth = async (staffId, year, month) => {
-  const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-  const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
   
-  return await db.getAllAsync(
-    'SELECT * FROM attendance WHERE staff_id = ? AND date >= ? AND date <= ? ORDER BY date',
-    [staffId, startDate, endDate]
-  );
-};
+  console.log('[DB] Loading staff data...');
+  try {
+    staffCache = await loadStaff();
+    attendanceCache = await loadAttendance();
+    advancesCache = await loadAdvances();
+    isReady = true;
+    console.log('[DB] Initialization complete');
+    console.log('[DB] Staff loaded:', staffCache.length, 'records');
+    return true;
+  } catch (e) {
+    console.error('[DB] Init failed:', e);
+    staffCache = [];
+    attendanceCache = [];
+    advancesCache = [];
+    isReady = true;
+    return true;
+  }
+}
 
-export const getAttendanceByDateRange = async (staffId, startDate, endDate) => {
-  return await db.getAllAsync(
-    'SELECT * FROM attendance WHERE staff_id = ? AND date >= ? AND date <= ? ORDER BY date',
-    [staffId, startDate, endDate]
-  );
-};
+async function ensureLoaded() {
+  if (!isReady) {
+    await initDatabase();
+  }
+  if (!staffCache) staffCache = [];
+  if (!attendanceCache) attendanceCache = [];
+  if (!advancesCache) advancesCache = [];
+}
 
-export const getMonthlySummary = async (year, month) => {
-  const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-  const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+export async function addStaff(name, position, salary, phone, joinDate, salaryType, salaryStartDate, salaryEndDate, sundayHoliday, note) {
+  await ensureLoaded();
   
-  return await db.getAllAsync(`
-    SELECT s.id, s.name, s.position, s.salary,
-      SUM(CASE WHEN a.status = 'P' THEN 1 ELSE 0 END) as present,
-      SUM(CASE WHEN a.status = 'A' THEN 1 ELSE 0 END) as absent,
-      SUM(CASE WHEN a.status = 'L' THEN 1 ELSE 0 END) as leave
-    FROM staff s
-    LEFT JOIN attendance a ON s.id = a.staff_id AND a.date >= ? AND a.date <= ?
-    GROUP BY s.id
-    ORDER BY s.name
-  `, [startDate, endDate]);
-};
-
-export const addAdvance = async (staffId, amount, date, note) => {
-  await db.runAsync(
-    'INSERT INTO advances (staff_id, amount, date, note) VALUES (?, ?, ?, ?)',
-    [staffId, amount, date, note || '']
-  );
-};
-
-export const deleteAdvance = async (id) => {
-  await db.runAsync('DELETE FROM advances WHERE id = ?', [id]);
-};
-
-export const getMonthlyAdvances = async (staffId, year, month) => {
-  const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-  const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+  const newId = staffCache.length > 0 ? Math.max(...staffCache.map(s => s.id)) + 1 : 1;
+  const newStaff = {
+    id: newId,
+    name,
+    position,
+    salary: parseFloat(salary),
+    salary_type: salaryType || 'monthly',
+    salary_start_date: salaryStartDate,
+    salary_end_date: salaryEndDate,
+    phone,
+    join_date: joinDate,
+    sunday_holiday: sundayHoliday ? 1 : 0,
+    note: note || ''
+  };
   
-  return await db.getAllAsync(
-    'SELECT * FROM advances WHERE staff_id = ? AND date >= ? AND date <= ? ORDER BY date',
-    [staffId, startDate, endDate]
-  );
-};
+  staffCache.push(newStaff);
+  await saveStaff(staffCache);
+  console.log('[DB] Staff added:', newId);
+  return newId;
+}
 
-export const getAdvancesByDateRange = async (staffId, startDate, endDate) => {
-  return await db.getAllAsync(
-    'SELECT * FROM advances WHERE staff_id = ? AND date >= ? AND date <= ? ORDER BY date',
-    [staffId, startDate, endDate]
-  );
-};
+export async function getAllStaff() {
+  await ensureLoaded();
+  console.log('[DB] getAllStaff:', staffCache.length, 'records');
+  return staffCache || [];
+}
 
-export const getAdvancesForStaff = async (staffId) => {
-  return await db.getAllAsync(
-    'SELECT * FROM advances WHERE staff_id = ? ORDER BY date DESC',
-    [staffId]
-  );
-};
+export async function getStaffById(id) {
+  await ensureLoaded();
+  return staffCache.find(s => s.id === id) || null;
+}
 
-export const getAllAdvances = async () => {
-  return await db.getAllAsync('SELECT * FROM advances ORDER BY date DESC');
-};
+export async function updateStaff(id, name, position, salary, phone, salaryType, salaryStartDate, salaryEndDate, sundayHoliday, note) {
+  await ensureLoaded();
+  
+  const index = staffCache.findIndex(s => s.id === id);
+  if (index !== -1) {
+    staffCache[index] = {
+      ...staffCache[index],
+      name,
+      position,
+      salary: parseFloat(salary),
+      phone,
+      salary_type: salaryType || 'monthly',
+      salary_start_date: salaryStartDate,
+      salary_end_date: salaryEndDate,
+      sunday_holiday: sundayHoliday ? 1 : 0,
+      note: note || ''
+    };
+    await saveStaff(staffCache);
+    console.log('[DB] Staff updated:', id);
+  }
+}
+
+export async function deleteStaff(id) {
+  await ensureLoaded();
+  
+  staffCache = staffCache.filter(s => s.id !== id);
+  attendanceCache = attendanceCache.filter(a => a.staff_id !== id);
+  advancesCache = advancesCache.filter(a => a.staff_id !== id);
+  
+  await saveStaff(staffCache);
+  await saveAttendance(attendanceCache);
+  await saveAdvances(advancesCache);
+  console.log('[DB] Staff deleted:', id);
+}
+
+export async function markAttendance(staffId, date, status, note) {
+  await ensureLoaded();
+  
+  const existingIndex = attendanceCache.findIndex(
+    a => a.staff_id === staffId && a.date === date
+  );
+  
+  if (existingIndex !== -1) {
+    attendanceCache[existingIndex].status = status;
+    attendanceCache[existingIndex].note = note || '';
+  } else {
+    attendanceCache.push({
+      id: attendanceCache.length > 0 ? Math.max(...attendanceCache.map(a => a.id)) + 1 : 1,
+      staff_id: staffId,
+      date,
+      status,
+      note: note || ''
+    });
+  }
+  
+  await saveAttendance(attendanceCache);
+  console.log('[DB] Attendance marked:', staffId, date, status);
+}
+
+export async function getAttendanceByDate(date) {
+  await ensureLoaded();
+  
+  return attendanceCache
+    .filter(a => a.date === date)
+    .map(a => {
+      const staff = staffCache.find(s => s.id === a.staff_id);
+      return {
+        ...a,
+        name: staff?.name || '',
+        position: staff?.position || ''
+      };
+    });
+}
+
+export async function getAttendanceByStaffAndMonth(staffId, year, month) {
+  await ensureLoaded();
+  
+  const startDate = year + '-' + (month < 10 ? '0' + month : month) + '-01';
+  const endDate = year + '-' + (month < 10 ? '0' + month : month) + '-31';
+  
+  return attendanceCache.filter(
+    a => a.staff_id === staffId && a.date >= startDate && a.date <= endDate
+  );
+}
+
+export async function getAttendanceByDateRange(staffId, startDate, endDate) {
+  await ensureLoaded();
+  
+  return attendanceCache.filter(
+    a => a.staff_id === staffId && a.date >= startDate && a.date <= endDate
+  );
+}
+
+export async function getMonthlySummary(year, month) {
+  await ensureLoaded();
+  
+  const startDate = year + '-' + (month < 10 ? '0' + month : month) + '-01';
+  const endDate = year + '-' + (month < 10 ? '0' + month : month) + '-31';
+  
+  return staffCache.map(staff => {
+    const staffAttendance = attendanceCache.filter(
+      a => a.staff_id === staff.id && a.date >= startDate && a.date <= endDate
+    );
+    return {
+      id: staff.id,
+      name: staff.name,
+      position: staff.position,
+      salary: staff.salary,
+      present: staffAttendance.filter(a => a.status === 'P').length,
+      absent: staffAttendance.filter(a => a.status === 'A').length,
+      leave: staffAttendance.filter(a => a.status === 'L').length
+    };
+  });
+}
+
+export async function addAdvance(staffId, amount, date, note) {
+  await ensureLoaded();
+  
+  const newAdvance = {
+    id: advancesCache.length > 0 ? Math.max(...advancesCache.map(a => a.id)) + 1 : 1,
+    staff_id: staffId,
+    amount: parseFloat(amount),
+    date,
+    note: note || ''
+  };
+  
+  advancesCache.push(newAdvance);
+  await saveAdvances(advancesCache);
+  console.log('[DB] Advance added:', staffId, amount);
+}
+
+export async function deleteAdvance(id) {
+  await ensureLoaded();
+  
+  advancesCache = advancesCache.filter(a => a.id !== id);
+  await saveAdvances(advancesCache);
+}
+
+export async function getMonthlyAdvances(staffId, year, month) {
+  await ensureLoaded();
+  
+  const startDate = year + '-' + (month < 10 ? '0' + month : month) + '-01';
+  const endDate = year + '-' + (month < 10 ? '0' + month : month) + '-31';
+  
+  return advancesCache.filter(
+    a => a.staff_id === staffId && a.date >= startDate && a.date <= endDate
+  );
+}
+
+export async function getAdvancesByDateRange(staffId, startDate, endDate) {
+  await ensureLoaded();
+  
+  return advancesCache.filter(
+    a => a.staff_id === staffId && a.date >= startDate && a.date <= endDate
+  );
+}
+
+export async function getAdvancesForStaff(staffId) {
+  await ensureLoaded();
+  
+  return advancesCache
+    .filter(a => a.staff_id === staffId)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+export async function getAllAdvances() {
+  await ensureLoaded();
+  
+  return advancesCache.sort((a, b) => new Date(b.date) - new Date(a.date));
+}

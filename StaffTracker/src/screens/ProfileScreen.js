@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Linking, Alert, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Linking, Alert, Platform, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { getAllStaff, getAllAdvances } from '../database/db';
+import { getUserData, logout, isAuthenticated } from '../auth/authService';
 
 const APP_VERSION = '1.0.0';
 const BUILD_NUMBER = '1';
@@ -18,6 +20,7 @@ export default function ProfileScreen({ navigation }) {
     activeStaff: 0,
     totalAdvances: 0,
   });
+  const [userData, setUserData] = useState(null);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -30,11 +33,22 @@ export default function ProfileScreen({ navigation }) {
       const staffList = await getAllStaff();
       const advancesList = await getAllAdvances();
       
+      let user = await getUserData();
+      
       setStats({
-        totalStaff: staffList.length,
-        activeStaff: staffList.length,
-        totalAdvances: advancesList.length,
+        totalStaff: staffList?.length || 0,
+        activeStaff: staffList?.length || 0,
+        totalAdvances: advancesList?.length || 0,
       });
+      
+      if (user) {
+        setUserData({
+          name: user.name,
+          email: user.email,
+          photoURL: user.photoURL,
+          id: user.id,
+        });
+      }
     } catch (error) {
       console.error('Error loading stats:', error);
       setStats({
@@ -94,15 +108,19 @@ export default function ProfileScreen({ navigation }) {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
-            <View style={styles.avatar}>
-              <Ionicons name="people" size={40} color="#fff" />
-            </View>
+            {userData?.photoURL ? (
+              <Image source={{ uri: userData.photoURL }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatar}>
+                <Ionicons name="person" size={40} color="#fff" />
+              </View>
+            )}
             <View style={styles.appBadge}>
               <Text style={styles.appBadgeText}>v{APP_VERSION}</Text>
             </View>
           </View>
-          <Text style={styles.appName}>StaffTracker</Text>
-          <Text style={styles.appTagline}>Simplifying Household Staff Management</Text>
+          <Text style={styles.userName}>{userData?.name || 'Guest'}</Text>
+          <Text style={styles.userEmail}>{userData?.email || 'Sign in to sync your data'}</Text>
         </View>
 
         <View style={styles.statsContainer}>

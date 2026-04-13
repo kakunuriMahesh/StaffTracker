@@ -23,6 +23,7 @@
         "backgroundColor": "#2563EB"
       },
       "edgeToEdgeEnabled": false,
+      "newArchEnabled": false,
       "package": "com.srcdesigns.StaffTracker",
       "versionCode": 1,
       "versionName": "1.0.0",
@@ -36,12 +37,15 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "scheme": "stafftracker",
     "plugins": [
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {
-        "projectId": "stafftracker-app"
+        "projectId": "98f0d1e1-ed73-4f32-bc09-915095adc7f7"
       }
     },
     "privacy": "unlisted",
@@ -56,6 +60,7 @@
     ],
     "description": "StaffTracker is a comprehensive mobile app for managing household staff, tracking attendance, calculating salaries, and generating payslips. Perfect for homes with domestic help.",
     "primaryColor": "#2563EB",
-    "backgroundColor": "#F8FAFC"
+    "backgroundColor": "#F8FAFC",
+    "owner": "srcdesigns"
   }
 }

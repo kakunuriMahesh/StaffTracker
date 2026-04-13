@@ -45,19 +45,20 @@ export default function MonthlyScreen() {
   const loadData = useCallback(async () => {
     if (!selected) return;
     
+    const current = dayjs();
     let att;
     let advances = [];
     let startDate, endDate;
     const staffSalaryType = selected.salary_type || 'monthly';
     
     if (filterType === 'monthly') {
-      startDate = now.startOf('month').format('YYYY-MM-DD');
-      endDate = now.endOf('month').format('YYYY-MM-DD');
-      att = await getAttendanceByStaffAndMonth(selected.id, now.year(), now.month() + 1);
-      advances = await getMonthlyAdvances(selected.id, now.year(), now.month() + 1);
+      startDate = current.startOf('month').format('YYYY-MM-DD');
+      endDate = current.endOf('month').format('YYYY-MM-DD');
+      att = await getAttendanceByStaffAndMonth(selected.id, current.year(), current.month() + 1);
+      advances = await getMonthlyAdvances(selected.id, current.year(), current.month() + 1);
     } else if (filterType === 'weekly') {
-      startDate = now.startOf('week').format('YYYY-MM-DD');
-      endDate = now.endOf('week').format('YYYY-MM-DD');
+      startDate = current.startOf('week').format('YYYY-MM-DD');
+      endDate = current.endOf('week').format('YYYY-MM-DD');
       att = await getAttendanceByDateRange(selected.id, startDate, endDate);
       advances = await getAdvancesByDateRange(selected.id, startDate, endDate);
     } else {
@@ -79,7 +80,7 @@ export default function MonthlyScreen() {
     const unmarked = days - present - leave - absent;
     
     let paidDays, salaryToUse;
-    const daysInMonth = now.daysInMonth();
+    const daysInMonth = current.daysInMonth();
     
     if (staffSalaryType === 'daily') {
       paidDays = present;
@@ -112,7 +113,7 @@ export default function MonthlyScreen() {
       startDate,
       endDate,
     });
-  }, [selected, filterType, customStart, customEnd, now]);
+  }, [selected, filterType, customStart, customEnd]);
 
   useFocusEffect(
     useCallback(() => {

@@ -1,10 +1,11 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState, useCallback, useEffect } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
 import { getAllStaff, getAttendanceByDate } from '../database/db';
+import { syncData, addSyncListener, removeSyncListener } from '../services/syncManager';
 
 const TODAY = dayjs().format('YYYY-MM-DD');
 const STATUS_COLOR = { P: '#D1FAE5', A: '#FEE2E2', L: '#FEF3C7' };
@@ -14,7 +15,21 @@ const STATUS_ICON  = { P: 'checkmark-circle', A: 'close-circle', L: 'time-outlin
 export default function HomeScreen({ navigation }) {
   const [staff, setStaff]           = useState([]);
   const [todayMap, setTodayMap]     = useState({});
+  const [lastSync, setLastSync] = useState(null);
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    const handleSyncEvent = (event) => {
+      if (event.type === 'sync_complete') {
+        loadData();
+        setLastSync(event.timestamp);
+      } else if (event.type === 'sync_error') {
+        Alert.alert('Sync Error', event.error);
+      }
+    };
+    addSyncListener(handleSyncEvent);
+    return () => removeSyncListener(handleSyncEvent);
+  }, []);
 
   const loadData = async () => {
     const list = await getAllStaff();
@@ -81,10 +96,18 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.subtitle}>{dayjs().format('dddd, DD MMM YYYY')}</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('AddStaff')}>
-          <Ionicons name="add" size={20} color="#fff" />
-          <Text style={styles.addBtnText}>Add</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            style={styles.syncBtn} 
+            onPress={() => navigation.navigate('SyncSettings')}
+          >
+            <Ionicons name="cloud-done-outline" size={20} color="#2563EB" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('AddStaff')}>
+            <Ionicons name="add" size={20} color="#fff" />
+            <Text style={styles.addBtnText}>Add</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       {staff.length === 0 ? (
         <View style={styles.empty}>
@@ -118,6 +141,8 @@ const styles = StyleSheet.create({
   subtitle:    { fontSize: 13, color: '#6B7280', marginLeft: 4 },
   addBtn:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2563EB', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, shadowColor: '#2563EB', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 3 },
   addBtnText:  { color: '#fff', fontWeight: '600', fontSize: 14, marginLeft: 4 },
+  syncBtn: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
+  headerActions: { flexDirection: 'row', alignItems: 'center' },
   card:        { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 16, marginVertical: 6, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   avatar:      { width: 50, height: 50, borderRadius: 25, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center', marginRight: 14 },
   avatarText:  { fontSize: 20, fontWeight: '700', color: '#1D4ED8' },

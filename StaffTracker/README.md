@@ -10,104 +10,214 @@ A mobile application for managing household staff, tracking attendance, and calc
 - **Salary Calculation**: Automatic salary pro-rata based on attendance
 - **Advance Payments**: Record and track advance payments to staff
 - **Payslip Export**: Generate and share salary slips as PDF
+- **Google Sign-In**: Sync data with Google Drive (optional)
+- **Offline Support**: Works without internet, syncs when online
 
-## Tech Stack
+---
 
-- **Framework**: Expo SDK 54 (React Native 0.81)
-- **Navigation**: React Navigation 7 (Bottom Tabs + Native Stack)
-- **Database**: expo-sqlite (local SQLite storage)
-- **UI**: Ionicons, react-native-calendars, dayjs
-- **Utils**: expo-print & expo-sharing for PDF generation
-
-## Installation
+## Quick Start (No Setup Required)
 
 ```bash
 # Install dependencies
 npm install
 
-# Start the development server
+# Start the app (works immediately with local storage)
 npx expo start
 
-# Run on Android
-npx expo run:android
-
-# Run on iOS
-npx expo run:ios
+# Or tap "Continue without login" on the login screen
 ```
+
+The app works **fully offline** without Google Sign-In. Just tap "Continue without login".
+
+---
+
+## Part 1: Building the App (APK)
+
+### Option A: Local Debug Build (Free - Recommended for testing)
+
+```bash
+# Build debug APK locally
+cd android
+./gradlew assembleDebug
+
+# APK will be at: android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Or use Expo:
+```bash
+npx expo run:android
+```
+
+**This creates a working APK** that installs and runs on any Android device.
+
+### Option B: EAS Build (For production release)
+
+**Requires EAS account** (free to sign up):
+```bash
+# 1. Login to EAS
+npx eas login
+
+# 2. Configure project (first time)
+npx eas project init
+
+# 3. Build Android APK
+npx eas build -p android --profile preview
+
+# 4. Or build for Play Store
+npx eas build -p android --profile production
+```
+
+**EAS is only needed if you want:**
+- Play Store release (signed with Play keystore)
+- TestFlight for iOS
+- Remote builds (not local computer)
+
+**For local testing, just use Option A** - it's free and works.
+
+---
+
+## Part 2: Google Sign-In Setup (Optional)
+
+**This is FREE** - uses Google Cloud Console (no EAS needed).
+
+To enable Google Sign-In, update `src/auth/authService.js` after creating the OAuth client:
+
+```bash
+# Edit the authService.js file and replace:
+#   const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
+#   const REDIRECT_URI = 'https://auth.expo.io/@your-username/stafftracker';
+# With your actual values from Google Cloud Console
+nano src/auth/authService.js
+```
+
+### Why Google Sign-In?
+
+- Syncs data to Google Drive (backup across devices)
+- No manual backup/restore needed
+
+### Step 1: Create OAuth Client in Google Cloud Console
+
+1. Go to: https://console.cloud.google.com/
+2. Select your project (or create new)
+3. Go to **APIs & Services** → **Credentials**
+4. Click **Create Credentials** → **OAuth client ID**
+5. Choose **Web application**
+6. Fill:
+   - **Name**: `StaffTracker`
+   - **Authorized JavaScript origins**: `https://auth.expo.io`
+   - **Authorized redirect URIs**: Click "Add URI" and add:
+     ```
+     https://auth.expo.io/@your-expo-username/stafftracker
+     ```
+     (Replace `@your-expo-username` with your Expo username)
+7. Click **Create**
+8. Copy the **Client ID** (ends in `.apps.googleusercontent.com`)
+
+### Step 2: Update the App
+
+1. Open `src/auth/authService.js`
+2. Replace `YOUR_GOOGLE_CLIENT_ID` with your actual Client ID:
+```javascript
+const GOOGLE_CLIENT_ID = '123456789-abc.apps.googleusercontent.com';
+```
+
+### Step 3: Test
+
+```bash
+npx expo start
+```
+
+Now "Sign in with Google" will work.
+
+---
+
+## Part 3: Google Play Store (Optional)
+
+**Requires:**
+1. Google Play Developer account ($25 one-time)
+2. EAS build OR local release build
+
+### To build for Play Store:
+
+```bash
+# 1. Generate signing key (one time)
+keytool -genkeypair -v keystore my-release-key.keystore -alias release -keyalg RSA -keysize 2048 -validity 10000
+
+# 2. Configure eas.json with your keystore
+npx eas build -p android --profile production
+
+# 3. Upload to Play Store
+npx eas submit -p android
+```
+
+---
+
+## Summary: What You Need
+
+| Task | Required | Cost |
+|------|----------|------|
+| Run app locally | Nothing | Free |
+| Local APK test | Option A | Free |
+| Google Sign-In | Google Cloud Console | Free |
+| EAS Build | EAS account | Free |
+| Play Store release | Play Developer + EAS | $25 + free |
+
+---
+
+## Part 4: Firebase Migration (Future)
+
+The JSON structure is ready for Firebase migration:
+
+```json
+{
+  "staff": [{ "id": 1, "name": "..." }],
+  "attendance": [{ "staffId": 1, "date": "...", "status": "P" }],
+  "payments": [{ "staffId": 1, "amount": 5000 }],
+  "settings": { "syncFrequency": "daily" },
+  "metadata": { "version": "1.0.0" }
+}
+```
+
+Maps directly to Firestore collections.
+
+---
 
 ## App Structure
 
 ```
 StaffTracker/
-├── App.js                 # Main app with navigation setup
-├── app.json               # Expo configuration
-├── terms-and-conditions.html # Legal document
-├── privacy-policy.html     # Legal document
-├── PLAYSTORE_DEPLOYMENT.md # Play Store deployment guide
+├── App.js                 # Main app with navigation
+├── app.json              # Expo configuration
 ├── src/
+│   ├── auth/
+│   │   └── authService.js     # Google OAuth
+│   ├── services/
+│   │   ├── driveService.js   # Google Drive API
+│   │   ├── syncManager.js   # Sync logic
+│   │   └── jsonDataService.js # Data conversion
 │   ├── database/
-│   │   └── db.js          # SQLite database operations
-│   ├── screens/
-│   │   ├── HomeScreen.js          # Staff list (tab 1)
-│   │   ├── DailyScreen.js     # Today's attendance (tab 2)
-│   │   ├── MonthlyScreen.js   # Monthly view (tab 3)
-│   │   ├── AddStaffScreen.js   # Add new staff
-│   │   ├── EditStaffScreen.js # Edit staff
-│   │   ├── StaffDetailScreen.js # Staff details + attendance
-│   │   └── ProfileScreen.js   # Profile & settings (tab 4)
-│   ├── components/
-│   │   ├── StaffCard.js
-│   │   └── AttendanceDot.js
-│   └── utils/
-│       └── salary.js      # Salary calculation
+│   │   └── db.js           # SQLite operations
+│   └── screens/
+│       ├── LoginScreen.js
+│       ├── HomeScreen.js
+│       ├── DailyScreen.js
+│       ├── MonthlyScreen.js
+│       ├── ProfileScreen.js
+│       └── SyncSettingsScreen.js
 ```
 
-## Database Schema
+---
 
-### staff
-| Column | Type | Description |
-|--------|------|--------------|
-| id | INTEGER | Primary key |
-| name | TEXT | Staff name |
-| position | TEXT | Role (Maid, Cook, etc.) |
-| salary | REAL | Salary amount |
-| salary_type | TEXT | weekly/monthly/manual |
-| phone | TEXT | Contact number |
-| join_date | TEXT | Join date (YYYY-MM-DD) |
+## Troubleshooting
 
-### attendance
-| Column | Type | Description |
-|--------|------|--------------|
-| id | INTEGER | Primary key |
-| staff_id | INTEGER | Foreign key to staff |
-| date | TEXT | Date (YYYY-MM-DD) |
-| status | TEXT | P (Present), A (Absent), L (Leave) |
+| Error | Fix |
+|-------|-----|
+| "Invalid redirect_uri" | Update redirect URI in Google Cloud Console |
+| "Access denied" | Add authorized origins in Google Console |
+| "Token expired" | Re-login with Google |
+| Build fails | Run `npx expo install` first |
 
-### advances
-| Column | Type | Description |
-|--------|------|--------------|
-| id | INTEGER | Primary key |
-| staff_id | INTEGER | Foreign key to staff |
-| amount | REAL | Advance amount |
-| date | TEXT | Date (YYYY-MM-DD) |
-| note | TEXT | Optional note |
-
-## Usage
-
-1. **Add Staff**: Go to Staff tab → Tap "Add" button → Fill details → Save
-2. **Mark Attendance**: Go to Today tab → Tap P/A/L buttons for each staff
-3. **View Monthly**: Go to Monthly tab → Select staff → View calendar and salary breakdown
-4. **Add Advance**: Open staff detail → Tap "Add Advance" → Enter amount and date
-5. **Share Payslip**: In Monthly tab → Tap "Share Payslip" → Choose app to share
-6. **Profile**: Go to Profile tab → View stats, read legal docs, rate/share app
-
-## Screenshots
-
-The app has four main tabs:
-- **Staff**: List of all staff with today's attendance status
-- **Today**: Mark and view today's attendance
-- **Monthly**: Calendar view with salary calculations
-- **Profile**: App info, stats, legal links, and support options
+---
 
 ## License
 

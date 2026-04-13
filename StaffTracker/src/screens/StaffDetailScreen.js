@@ -14,6 +14,7 @@ import {
   addAdvance, deleteAdvance
 } from '../database/db';
 import { calculateSalary } from '../utils/salary';
+import { syncData } from '../services/syncManager';
 
 const STATUS_BG   = { P: '#D1FAE5', A: '#FEE2E2', L: '#FEF3C7' };
 const STATUS_FG   = { P: '#065F46', A: '#991B1B', L: '#92400E' };
@@ -91,6 +92,7 @@ export default function StaffDetailScreen({ route, navigation }) {
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: async () => {
           await deleteStaff(staffId);
+          await syncData();
           navigation.goBack();
         }},
       ]
@@ -103,6 +105,7 @@ export default function StaffDetailScreen({ route, navigation }) {
       return;
     }
     await addAdvance(staffId, parseFloat(advAmount), advDate, advNote);
+    await syncData();
     setModal(false);
     setAdvAmount('');
     setAdvNote('');

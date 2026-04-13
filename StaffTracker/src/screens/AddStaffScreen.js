@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
 import { addStaff } from '../database/db';
+import { syncData } from '../services/syncManager';
 import { Calendar } from 'react-native-calendars';
 
 const DEFAULT_ROLES = ['Maid', 'Cook', 'Driver', 'Gardener', 'Security', 'Watchman', 'Other'];
@@ -179,6 +180,7 @@ export default function AddStaffScreen({ navigation }) {
     setSaving(true);
     try {
       await addStaff(name.trim(), position, parseFloat(salary), phone, joinDate, salaryType, salaryStartDate, salaryEndDate, sundayHoliday, note.trim());
+      await syncData();
       navigation.goBack();
     } catch (error) {
       console.error('Error saving staff:', error);
