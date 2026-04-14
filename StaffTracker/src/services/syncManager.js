@@ -1,4 +1,5 @@
 import { getAccessToken } from '../auth/authService';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { 
   downloadJSON, 
   uploadJSON, 
@@ -102,6 +103,22 @@ export const setLastSyncTime = async () => {
   await authStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
 };
 
+const getFreshToken = async () => {
+  try {
+    console.log('[Sync] Fetching fresh token from Google...');
+    const tokens = await GoogleSignin.getTokens();
+    if (!tokens.accessToken) {
+      console.log('[Sync] No fresh access token available');
+      return null;
+    }
+    console.log('[Sync] Fresh token obtained');
+    return tokens.accessToken;
+  } catch (error) {
+    console.log('[Sync] Failed to get fresh token:', error.message);
+    return null;
+  }
+};
+
 export const syncData = async (forceUpload = false) => {
   if (isSyncing) {
     return { success: false, reason: 'already_syncing' };
@@ -110,38 +127,104 @@ export const syncData = async (forceUpload = false) => {
   isSyncing = true;
   notifyListeners({ type: 'sync_start' });
   
+  let accessToken = null;
   try {
-    let accessToken = await getAccessToken();
-    if (!accessToken) {
-      console.log('No access token - not logged in, skipping sync');
-      isSyncing = false;
-      return { success: false, error: 'not_logged_in' };
+    console.log('[Sync] Starting sync...');
+    
+    const { initJsonDatabase, isDBReady } = await import('./jsonDataService');
+    
+    if (!isDBReady()) {
+      console.log('[Sync] Database initializing...');
+      try {
+        await initJsonDatabase();
+      } catch (dbError) {
+        console.log('[Sync] DB init error (will try export anyway):', dbError.message);
+      }
     }
     
+    if (!isDBReady()) {
+      console.log('[Sync] DB not ready, using empty data');
+      const localData = JSON.stringify({
+        version: '1.0.0',
+        exportedAt: new Date().toISOString(),
+        staff: [],
+        attendance: [],
+        payments: [],
+        settings: {},
+        metadata: { lastModified: new Date().toISOString(), appVersion: '1.0.0' }
+      });
+      accessToken = await getFreshToken();
+      if (!accessToken) {
+        isSyncing = false;
+        return { success: false, error: 'session_expired' };
+      }
+      console.log('[Sync] Uploading empty data (no DB)...');
+      const result = await uploadJSON(accessToken, localData);
+      if (result) {
+        isSyncing = false;
+        return { success: true };
+      }
+    }
+    
+    accessToken = await getFreshToken();
+    if (!accessToken) {
+      console.log('[Sync] No valid token - not logged in');
+      isSyncing = false;
+      return { success: false, error: 'session_expired' };
+    }
+    console.log('[Sync] Token available');
+    
+    console.log('[Sync] Getting local data...');
     const localData = await exportToJSON();
-    await saveToLocalCache(localData);
+    console.log('[Sync] Local data exported, size:', localData?.length);
+    
+    try {
+      await saveToLocalCache(localData);
+    } catch (cacheError) {
+      console.log('[Sync] Cache save skipped:', cacheError.message);
+    }
     
     let remoteData = null;
+    let fileNotFound = false;
     try {
       remoteData = await downloadJSON(accessToken);
+      console.log('[Sync] Remote data fetched:', !!remoteData);
     } catch (error) {
-      console.log('No remote data found or download error');
+      console.log('[Sync] No remote data (first time upload):', error.message);
+      fileNotFound = true;
     }
     
     let mergedData = localData;
     
-    if (remoteData && !forceUpload) {
-      const localModified = new Date(JSON.parse(localData).metadata.lastModified);
-      const remoteModified = new Date(JSON.parse(remoteData).metadata.lastModified);
-      
-      if (remoteModified > localModified) {
-        mergedData = remoteData;
-        await importFromJSON(mergedData, 'replace');
-        await saveToLocalCache(mergedData);
+    if (remoteData && !forceUpload && !fileNotFound) {
+      try {
+        const localModified = new Date(JSON.parse(localData).metadata.lastModified);
+        const remoteModified = new Date(JSON.parse(remoteData).metadata.lastModified);
+        
+        if (remoteModified > localModified) {
+          mergedData = remoteData;
+          await importFromJSON(mergedData, 'replace');
+          try {
+            await saveToLocalCache(mergedData);
+          } catch (cacheError) {
+            console.log('[Sync] Cache update skipped:', cacheError.message);
+          }
+        }
+      } catch (parseError) {
+        console.log('[Sync] Parse error, using local:', parseError.message);
       }
     }
     
-    await uploadJSON(accessToken, mergedData);
+    console.log('[Sync] Uploading data to Drive...');
+    const uploadResult = await uploadJSON(accessToken, mergedData);
+    if (!uploadResult) {
+      console.log('[Sync] Upload failed');
+      accessToken = await getFreshToken();
+      if (accessToken) {
+        console.log('[Sync] Retrying with fresh token...');
+        await uploadJSON(accessToken, mergedData);
+      }
+    }
     await setLastSyncTime();
     await clearPendingChanges();
     
@@ -154,19 +237,31 @@ export const syncData = async (forceUpload = false) => {
     
     return { success: true };
   } catch (error) {
+    console.log('[Sync] Overall error:', error.message);
     isSyncing = false;
-    await queuePendingChange('sync');
+    
+    try {
+      await queuePendingChange('sync');
+    } catch (queueError) {
+      console.log('[Sync] Queue skipped:', queueError.message);
+    }
+    
     notifyListeners({ 
       type: 'sync_error', 
       error: error.message 
     });
+    
     return { success: false, error: error.message };
   }
 };
 
+export const syncDataSafe = async (forceUpload = false) => {
+  return await syncData(forceUpload);
+};
+
 export const loadRemoteData = async () => {
   try {
-    const accessToken = await getAccessToken();
+    const accessToken = await getFreshToken();
     if (!accessToken) {
       throw new Error('No access token');
     }

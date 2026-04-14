@@ -126,10 +126,13 @@ async function getDbWithRetry(maxRetries) {
 export async function saveUser(googleUser) {
   var database = await getDbWithRetry();
   try {
+    if (!googleUser.google_id) {
+      throw new Error('google_id is required');
+    }
     await database.runAsync(
       'INSERT OR REPLACE INTO users (google_id, email, name, photo_url, id_token, updated_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))',
       [
-        googleUser.id,
+        googleUser.google_id,
         googleUser.email,
         googleUser.name,
         googleUser.photo || null,
@@ -141,6 +144,17 @@ export async function saveUser(googleUser) {
   } catch (e) {
     console.error('[UserDB] saveUser error:', e);
     throw e;
+  }
+}
+
+export async function getUserByGoogleId(googleId) {
+  var database = await getDbWithRetry();
+  try {
+    var user = await database.getFirstAsync('SELECT * FROM users WHERE google_id = ? LIMIT 1', [googleId]);
+    return user || null;
+  } catch (e) {
+    console.error('[UserDB] getUserByGoogleId error:', e);
+    return null;
   }
 }
 

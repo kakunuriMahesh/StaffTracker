@@ -1,9 +1,15 @@
 import * as SecureStore from 'expo-secure-store';
 import { getAccessToken } from '../auth/authService';
-import * as FileSystem from 'expo-file-system';
+import { 
+  makeDirectoryAsync, 
+  writeAsStringAsync, 
+  readAsStringAsync, 
+  deleteAsync, 
+  getInfoAsync,
+  documentDirectory 
+} from 'expo-file-system/legacy';
 
-const APP_DATA_FOLDER = 'appDataFolder';
-const DATA_FILE_NAME = 'stafftracker_data.json';
+const DATA_FILE_NAME = 'staff_backup.json';
 
 const getDriveApiUrl = (endpoint) => {
   return `https://www.googleapis.com/drive/v3/${endpoint}`;
@@ -13,81 +19,71 @@ const getUploadUrl = (endpoint) => {
   return `https://www.googleapis.com/upload/drive/v3/${endpoint}`;
 };
 
-export const getAppDataFolderId = async (accessToken) => {
-  const url = new URL(getDriveApiUrl('files'));
-  url.searchParams.set('q', "name='appDataFolder' and mimeType='application/vnd.google-apps.folder' and trashed=false");
-  url.searchParams.set('spaces', 'appDataFolder');
-  url.searchParams.set('fields', 'files(id, name)');
-  
-  const response = await fetch(url.toString(), {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-    },
-  });
-  
-  if (!response.ok) {
-    throw new Error('Failed to get app data folder');
+export const getFileIdByName = async (accessToken, fileName) => {
+  if (!accessToken) {
+    console.log('[DriveService] No accessToken provided');
+    return null;
   }
   
-  const data = await response.json();
-  
-  if (data.files && data.files.length > 0) {
-    return data.files[0].id;
+  try {
+    console.log('[DriveService] Searching for file:', fileName);
+    const encodedName = encodeURIComponent(fileName);
+    const url = new URL(getDriveApiUrl('files'));
+    url.searchParams.set('q', `name='${fileName}' and trashed=false`);
+    url.searchParams.set('fields', 'files(id, name, modifiedTime)');
+    
+    const response = await fetch(url.toString(), {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    });
+    
+    if (response.status === 401) {
+      console.log('[DriveService] 401 Unauthorized - token expired');
+      throw new Error('TOKEN_EXPIRED');
+    }
+    
+    if (!response.ok) {
+      console.log('[DriveService] Search API error, status:', response.status);
+      return null;
+    }
+    
+    const data = await response.json();
+    
+    if (data.files && data.files.length > 0) {
+      console.log('[DriveService] File found:', data.files[0].id);
+      return data.files[0].id;
+    }
+    
+    console.log('[DriveService] No existing file found');
+    return null;
+  } catch (error) {
+    if (error.message === 'TOKEN_EXPIRED') {
+      throw error;
+    }
+    console.log('[DriveService] getFileIdByName error:', error.message);
+    return null;
   }
-  
-  return null;
-};
-
-export const createAppDataFolder = async (accessToken) => {
-  const response = await fetch(getDriveApiUrl('files'), {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      name: 'appDataFolder',
-      mimeType: 'application/vnd.google-apps.folder',
-    }),
-  });
-  
-  if (!response.ok) {
-    throw new Error('Failed to create app data folder');
-  }
-  
-  const data = await response.json();
-  return data.id;
-};
-
-export const getDataFileId = async (accessToken) => {
-  const url = new URL(getDriveApiUrl('files'));
-  url.searchParams.set('q', `name='${DATA_FILE_NAME}' and trashed=false`);
-  url.searchParams.set('spaces', 'appDataFolder');
-  url.searchParams.set('fields', 'files(id, name, modifiedTime)');
-  
-  const response = await fetch(url.toString(), {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-    },
-  });
-  
-  if (!response.ok) {
-    throw new Error('Failed to get data file');
-  }
-  
-  const data = await response.json();
-  
-  if (data.files && data.files.length > 0) {
-    return data.files[0].id;
-  }
-  
-  return null;
 };
 
 export const downloadJSON = async (accessToken) => {
-  let fileId = await getDataFileId(accessToken);
+  if (!accessToken) {
+    console.log('[DriveService] No accessToken for download');
+    return null;
+  }
+  
+  let fileId;
+  try {
+    fileId = await getFileIdByName(accessToken, DATA_FILE_NAME);
+  } catch (error) {
+    if (error.message === 'TOKEN_EXPIRED') {
+      throw error;
+    }
+    return null;
+  }
   
   if (!fileId) {
+    console.log('[DriveService] No file to download');
     return null;
   }
   
@@ -100,60 +96,97 @@ export const downloadJSON = async (accessToken) => {
     },
   });
   
+  if (response.status === 401) {
+    console.log('[DriveService] 401 Unauthorized during download');
+    throw new Error('TOKEN_EXPIRED');
+  }
+  
   if (response.status === 204 || response.status === 404) {
     return null;
   }
   
   if (!response.ok) {
-    throw new Error('Failed to download JSON');
+    console.log('[DriveService] Download error, status:', response.status);
+    return null;
   }
   
   const content = await response.text();
+  console.log('[DriveService] Downloaded content length:', content.length);
   return content;
 };
 
 export const uploadJSON = async (accessToken, jsonContent) => {
-  let fileId = await getDataFileId(accessToken);
+  if (!accessToken) {
+    console.log('[DriveService] No accessToken for upload');
+    return null;
+  }
+  
+  console.log('[DriveService] Starting upload...');
+  
+  let fileId = null;
+  try {
+    fileId = await getFileIdByName(accessToken, DATA_FILE_NAME);
+  } catch (error) {
+    console.log('[DriveService] getFileIdByName error:', error.message);
+  }
   
   const metadata = {
     name: DATA_FILE_NAME,
     mimeType: 'application/json',
-    parents: [APP_DATA_FOLDER],
   };
   
   if (fileId) {
-    const updateUrl = new URL(getUploadUrl(`files/${fileId}`));
-    updateUrl.searchParams.set('uploadType', 'multipart');
-    
-    const boundary = '-------' + Date.now();
-    const delimiter = '\r\n--' + boundary + '\r\n';
-    const closeDelimiter = '\r\n--' + boundary + '--';
-    
-    const metadataPart = delimiter + 
-      'Content-Type: application/json; charset=UTF-8\r\n\r\n' + 
-      JSON.stringify(metadata);
-    
-    const contentPart = delimiter + 
-      'Content-Type: application/json; charset=UTF-8\r\n\r\n' + 
-      jsonContent + 
-      closeDelimiter;
-    
-    const response = await fetch(updateUrl.toString(), {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': `multipart/related; boundary=${boundary}`,
-      },
-      body: metadataPart + contentPart,
-    });
-    
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to update JSON: ${error}`);
+    console.log('[DriveService] Updating existing file:', fileId);
+    try {
+      const updateUrl = new URL(getUploadUrl(`files/${fileId}`));
+      updateUrl.searchParams.set('uploadType', 'multipart');
+      
+      const boundary = '-------' + Date.now();
+      const delimiter = '\r\n--' + boundary + '\r\n';
+      const closeDelimiter = '\r\n--' + boundary + '--';
+      
+      const metadataPart = delimiter + 
+        'Content-Type: application/json; charset=UTF-8\r\n\r\n' + 
+        JSON.stringify(metadata);
+      
+      const contentPart = delimiter + 
+        'Content-Type: application/json; charset=UTF-8\r\n\r\n' + 
+        jsonContent + 
+        closeDelimiter;
+      
+      const response = await fetch(updateUrl.toString(), {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': `multipart/related; boundary=${boundary}`,
+        },
+        body: metadataPart + contentPart,
+      });
+      
+      if (response.status === 401) {
+        console.log('[DriveService] 401 Unauthorized during update');
+        throw new Error('TOKEN_EXPIRED');
+      }
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log('[DriveService] Update failed:', response.status, errorText);
+        fileId = null;
+      } else {
+        console.log('[DriveService] File updated successfully');
+        return await response.json();
+      }
+    } catch (updateError) {
+      if (updateError.message === 'TOKEN_EXPIRED') {
+        throw updateError;
+      }
+      console.log('[DriveService] Update error:', updateError.message);
+      fileId = null;
     }
-    
-    return await response.json();
-  } else {
+  }
+  
+  if (!fileId) {
+    console.log('[DriveService] Creating new file...');
     const createUrl = new URL(getUploadUrl('files'));
     createUrl.searchParams.set('uploadType', 'multipart');
     
@@ -179,73 +212,115 @@ export const uploadJSON = async (accessToken, jsonContent) => {
       body: metadataPart + contentPart,
     });
     
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to create JSON: ${error}`);
+    if (response.status === 401) {
+      console.log('[DriveService] 401 Unauthorized during create');
+      throw new Error('TOKEN_EXPIRED');
     }
     
-    return await response.json();
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log('[DriveService] Create failed:', response.status, errorText);
+      throw new Error(`Failed to create file: ${errorText}`);
+    }
+    
+    const result = await response.json();
+    console.log('[DriveService] File created successfully:', result.id);
+    return result;
   }
+  
+  return null;
 };
 
-export const deleteDataFile = async (accessToken) => {
-  let fileId = await getDataFileId(accessToken);
+export const deleteBackupFile = async (accessToken) => {
+  if (!accessToken) {
+    return true;
+  }
+  
+  let fileId;
+  try {
+    fileId = await getFileIdByName(accessToken, DATA_FILE_NAME);
+  } catch (error) {
+    return true;
+  }
   
   if (!fileId) {
     return true;
   }
   
-  const response = await fetch(getDriveApiUrl(`files/${fileId}`), {
-    method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-    },
-  });
-  
-  return response.ok || response.status === 404;
+  try {
+    const response = await fetch(getDriveApiUrl(`files/${fileId}`), {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    });
+    
+    return response.ok || response.status === 404;
+  } catch (error) {
+    console.log('[DriveService] deleteBackupFile error:', error.message);
+    return false;
+  }
 };
 
-export const getFileMetadata = async (accessToken) => {
-  let fileId = await getDataFileId(accessToken);
+export const getBackupFileMetadata = async (accessToken) => {
+  if (!accessToken) {
+    return null;
+  }
+  
+  let fileId;
+  try {
+    fileId = await getFileIdByName(accessToken, DATA_FILE_NAME);
+  } catch (error) {
+    return null;
+  }
   
   if (!fileId) {
     return null;
   }
   
-  const url = new URL(getDriveApiUrl(`files/${fileId}`));
-  url.searchParams.set('fields', 'id, name, mimeType, createdTime, modifiedTime, size');
-  
-  const response = await fetch(url.toString(), {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-    },
-  });
-  
-  if (!response.ok) {
+  try {
+    const url = new URL(getDriveApiUrl(`files/${fileId}`));
+    url.searchParams.set('fields', 'id, name, mimeType, createdTime, modifiedTime, size');
+    
+    const response = await fetch(url.toString(), {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    });
+    
+    if (!response.ok) {
+      return null;
+    }
+    
+    return await response.json();
+  } catch (error) {
     return null;
   }
-  
-  return await response.json();
 };
 
 export const saveToLocalCache = async (jsonContent) => {
-  const cacheDir = FileSystem.documentDirectory + 'cache/';
-  await FileSystem.makeDirectoryAsync(cacheDir, { intermediates: true });
-  
-  const filePath = cacheDir + DATA_FILE_NAME;
-  await FileSystem.writeAsStringAsync(filePath, jsonContent);
+  try {
+    const cacheDir = documentDirectory + 'cache/';
+    await makeDirectoryAsync(cacheDir, { intermediates: true });
+    
+    const filePath = cacheDir + DATA_FILE_NAME;
+    await writeAsStringAsync(filePath, jsonContent);
+    console.log('[DriveService] Cache saved');
+  } catch (error) {
+    console.log('[DriveService] saveToLocalCache error:', error.message);
+  }
 };
 
 export const loadFromLocalCache = async () => {
   try {
-    const filePath = FileSystem.documentDirectory + 'cache/' + DATA_FILE_NAME;
-    const info = await FileSystem.getInfoAsync(filePath);
+    const filePath = documentDirectory + 'cache/' + DATA_FILE_NAME;
+    const info = await getInfoAsync(filePath);
     
     if (!info.exists) {
       return null;
     }
     
-    return await FileSystem.readAsStringAsync(filePath);
+    return await readAsStringAsync(filePath);
   } catch (error) {
     return null;
   }
@@ -253,9 +328,11 @@ export const loadFromLocalCache = async () => {
 
 export const clearLocalCache = async () => {
   try {
-    const cacheDir = FileSystem.documentDirectory + 'cache/';
-    await FileSystem.deleteAsync(cacheDir, { idempotent: true });
+    const cacheDir = documentDirectory + 'cache/';
+    await deleteAsync(cacheDir, { idempotent: true });
   } catch (error) {
     console.log('Failed to clear cache:', error);
   }
 };
+
+export const getDataFileId = getFileIdByName;

@@ -29,12 +29,20 @@ export const isAuthenticated = async () => {
 
 export const getUserData = async () => {
   const auth = await getStoredAuth();
-  return auth?.user || null;
+  return auth || null;
 };
 
 export const getAccessToken = async () => {
   const auth = await getStoredAuth();
-  return auth?.accessToken || null;
+  if (!auth) {
+    console.log('[Auth] No auth data found');
+    return null;
+  }
+  const token = auth?.accessToken || null;
+  if (!token) {
+    console.log('[Auth] No accessToken in auth data');
+  }
+  return token;
 };
 
 export const saveAuth = async (authData) => {

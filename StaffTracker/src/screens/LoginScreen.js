@@ -5,11 +5,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { isAuthenticated, getStoredAuth } from '../auth/authService';
 import { syncData, loadRemoteData, initSyncManager, addSyncListener, removeSyncListener } from '../services/syncManager';
-import { initUserDB, saveUser } from '../database/userDb';
+import { initUserDB, saveUser, getUserByGoogleId } from '../database/userDb';
 
 GoogleSignin.configure({
   webClientId: '619998385389-2t8oo9rgu0g6ejt8e409pp9b4bp6pa0o.apps.googleusercontent.com',
   offlineAccess: true,
+  scopes: ['https://www.googleapis.com/auth/drive.file'],
 });
 
 export default function LoginScreen({ navigation }) {
@@ -33,15 +34,38 @@ export default function LoginScreen({ navigation }) {
     return () => removeSyncListener(handleSyncStatus);
   }, [navigation]);
 
-  const handleAuthSuccess = async (userInfo) => {
+  const handleAuthSuccess = async (userInfo, tokens) => {
     try {
+      const google_id = userInfo?.id;
+      const accessToken = tokens?.accessToken;
+      
+      if (!google_id) {
+        console.log('[Login] ERROR: google_id is missing');
+        Alert.alert('Login Error', 'Could not get Google user ID. Please try again.');
+        setIsLoading(false);
+        return;
+      }
+      
+      if (!accessToken) {
+        Alert.alert('Drive Permission Required', 'Please grant Drive access to sync your data.');
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log('[Login] google_id:', google_id);
+      console.log('[Login] accessToken present:', !!accessToken);
+      console.log('[Login] Drive scope granted');
+      
       const googleUser = {
-        id: userInfo.user.id,
-        email: userInfo.user.email,
-        name: userInfo.user.name,
-        photo: userInfo.user.photo || userInfo.user.photoURL || null,
-        accessToken: userInfo.idToken,
+        google_id: google_id,
+        email: userInfo?.email || null,
+        name: userInfo?.name || null,
+        photo: userInfo?.photo || userInfo?.photoURL || null,
+        accessToken: accessToken,
+        idToken: tokens?.idToken || null,
       };
+      
+      console.log('[Login] Normalized user:', JSON.stringify({ google_id, email: googleUser.email, name: googleUser.name }));
 
       try {
         const SecureStore = require('expo-secure-store');
@@ -52,13 +76,32 @@ export default function LoginScreen({ navigation }) {
 
       try {
         await initUserDB();
-        await saveUser({ ...googleUser, idToken: userInfo.idToken });
-        console.log('User saved to SQLite');
+        const existingUser = await getUserByGoogleId(google_id);
+        if (existingUser) {
+          console.log('[Login] User already exists, skipping insert');
+        } else {
+          await saveUser(googleUser);
+          console.log('[Login] New user created');
+        }
       } catch (dbError) {
         console.log('SQLite save error (non-critical):', dbError.message);
       }
 
-      const syncResult = await syncData();
+      const syncPromise = syncData();
+      const timeoutPromise = new Promise((resolve) => 
+        setTimeout(() => resolve({ success: true, timeout: true }), 10000)
+      );
+      
+      let syncResult;
+      try {
+        syncResult = await Promise.race([syncPromise, timeoutPromise]);
+        if (syncResult?.timeout) {
+          console.log('[Login] Sync timeout, continuing anyway...');
+        }
+      } catch (syncError) {
+        console.log('[Login] Sync error (non-critical):', syncError.message);
+        syncResult = { success: true };
+      }
 
       if (syncResult.success) {
         await initSyncManager();
@@ -81,19 +124,22 @@ export default function LoginScreen({ navigation }) {
       
       if (authenticated) {
         setIsLoadingAuth(true);
-        const result = await loadRemoteData();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Sync timeout')), 10000)
+        );
         
-        if (result.success) {
-          await initSyncManager();
+        try {
+          const result = await Promise.race([loadRemoteData(), timeoutPromise]);
+          
+          if (result.success) {
+            await initSyncManager();
+            navigation.replace('MainApp');
+          } else {
+            navigation.replace('MainApp');
+          }
+        } catch (syncError) {
+          console.log('Sync timeout/fallback:', syncError.message);
           navigation.replace('MainApp');
-        } else {
-          Alert.alert(
-            'Sync Error',
-            'Could not sync with Google Drive. Continue offline?',
-            [
-              { text: 'Continue Offline', onPress: () => navigation.replace('MainApp') }
-            ]
-          );
         }
       } else {
         setIsLoadingAuth(false);
@@ -108,8 +154,21 @@ export default function LoginScreen({ navigation }) {
       setIsLoading(true);
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
-      console.log('User Info:', userInfo);
-      await handleAuthSuccess(userInfo.data);
+      console.log('[Login] User signed in');
+      
+      const tokens = await GoogleSignin.getTokens();
+      console.log('[Login] Tokens received');
+      
+      const rawUserInfo = userInfo?.data?.user || userInfo?.user || userInfo;
+      const googleId = rawUserInfo?.id;
+      if (!googleId) {
+        console.log('[Login] ERROR: No Google ID found');
+        Alert.alert('Login Error', 'Could not get Google user ID. Please try again.');
+        setIsLoading(false);
+        return;
+      }
+      console.log('[Login] Google ID:', googleId);
+      await handleAuthSuccess(rawUserInfo, tokens);
     } catch (error) {
       console.log('Google Sign-In Error:', error);
       if (error.code === 'SIGN_IN_CANCELLED') {
