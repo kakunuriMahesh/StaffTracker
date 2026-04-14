@@ -87,7 +87,7 @@ export default function StaffDetailScreen({ route, navigation }) {
   const handleDelete = () => {
     Alert.alert(
       'Delete Staff',
-      `Are you sure you want to delete ${staff?.name}? All attendance and advance records will also be deleted.`,
+      `This will remove ${staff?.name} from all synced devices.\n\nAre you sure you want to delete?`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: async () => {

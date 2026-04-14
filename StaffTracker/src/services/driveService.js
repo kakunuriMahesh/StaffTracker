@@ -9,7 +9,12 @@ import {
   documentDirectory 
 } from 'expo-file-system/legacy';
 
-const DATA_FILE_NAME = 'staff_backup.json';
+const getDataFileName = (googleId) => {
+  if (googleId) {
+    return `staff_backup_${googleId}.json`;
+  }
+  return 'staff_backup.json';
+};
 
 const getDriveApiUrl = (endpoint) => {
   return `https://www.googleapis.com/drive/v3/${endpoint}`;
@@ -19,11 +24,13 @@ const getUploadUrl = (endpoint) => {
   return `https://www.googleapis.com/upload/drive/v3/${endpoint}`;
 };
 
-export const getFileIdByName = async (accessToken, fileName) => {
+export const getFileIdByName = async (accessToken, googleId) => {
   if (!accessToken) {
     console.log('[DriveService] No accessToken provided');
     return null;
   }
+  
+  const fileName = getDataFileName(googleId);
   
   try {
     console.log('[DriveService] Searching for file:', fileName);
@@ -66,15 +73,17 @@ export const getFileIdByName = async (accessToken, fileName) => {
   }
 };
 
-export const downloadJSON = async (accessToken) => {
+export const downloadJSON = async (accessToken, googleId) => {
   if (!accessToken) {
     console.log('[DriveService] No accessToken for download');
     return null;
   }
   
+  const fileName = getDataFileName(googleId);
+  
   let fileId;
   try {
-    fileId = await getFileIdByName(accessToken, DATA_FILE_NAME);
+    fileId = await getFileIdByName(accessToken, googleId);
   } catch (error) {
     if (error.message === 'TOKEN_EXPIRED') {
       throw error;
@@ -83,7 +92,7 @@ export const downloadJSON = async (accessToken) => {
   }
   
   if (!fileId) {
-    console.log('[DriveService] No file to download');
+    console.log('[DriveService] No file to download:', fileName);
     return null;
   }
   
@@ -115,23 +124,24 @@ export const downloadJSON = async (accessToken) => {
   return content;
 };
 
-export const uploadJSON = async (accessToken, jsonContent) => {
+export const uploadJSON = async (accessToken, jsonContent, googleId) => {
   if (!accessToken) {
     console.log('[DriveService] No accessToken for upload');
     return null;
   }
   
-  console.log('[DriveService] Starting upload...');
+  const fileName = getDataFileName(googleId);
+  console.log('[DriveService] Starting upload:', fileName);
   
   let fileId = null;
   try {
-    fileId = await getFileIdByName(accessToken, DATA_FILE_NAME);
+    fileId = await getFileIdByName(accessToken, googleId);
   } catch (error) {
     console.log('[DriveService] getFileIdByName error:', error.message);
   }
   
   const metadata = {
-    name: DATA_FILE_NAME,
+    name: fileName,
     mimeType: 'application/json',
   };
   
@@ -231,14 +241,15 @@ export const uploadJSON = async (accessToken, jsonContent) => {
   return null;
 };
 
-export const deleteBackupFile = async (accessToken) => {
+export const deleteBackupFile = async (accessToken, googleId) => {
   if (!accessToken) {
     return true;
   }
   
+  const fileName = getDataFileName(googleId);
   let fileId;
   try {
-    fileId = await getFileIdByName(accessToken, DATA_FILE_NAME);
+    fileId = await getFileIdByName(accessToken, googleId);
   } catch (error) {
     return true;
   }
@@ -262,14 +273,16 @@ export const deleteBackupFile = async (accessToken) => {
   }
 };
 
-export const getBackupFileMetadata = async (accessToken) => {
+export const getBackupFileMetadata = async (accessToken, googleId) => {
   if (!accessToken) {
     return null;
   }
   
+  const fileName = getDataFileName(googleId);
+  
   let fileId;
   try {
-    fileId = await getFileIdByName(accessToken, DATA_FILE_NAME);
+    fileId = await getFileIdByName(accessToken, googleId);
   } catch (error) {
     return null;
   }
@@ -298,22 +311,24 @@ export const getBackupFileMetadata = async (accessToken) => {
   }
 };
 
-export const saveToLocalCache = async (jsonContent) => {
+export const saveToLocalCache = async (jsonContent, googleId) => {
   try {
     const cacheDir = documentDirectory + 'cache/';
     await makeDirectoryAsync(cacheDir, { intermediates: true });
     
-    const filePath = cacheDir + DATA_FILE_NAME;
+    const fileName = getDataFileName(googleId);
+    const filePath = cacheDir + fileName;
     await writeAsStringAsync(filePath, jsonContent);
-    console.log('[DriveService] Cache saved');
+    console.log('[DriveService] Cache saved:', fileName);
   } catch (error) {
     console.log('[DriveService] saveToLocalCache error:', error.message);
   }
 };
 
-export const loadFromLocalCache = async () => {
+export const loadFromLocalCache = async (googleId) => {
   try {
-    const filePath = documentDirectory + 'cache/' + DATA_FILE_NAME;
+    const fileName = getDataFileName(googleId);
+    const filePath = documentDirectory + 'cache/' + fileName;
     const info = await getInfoAsync(filePath);
     
     if (!info.exists) {

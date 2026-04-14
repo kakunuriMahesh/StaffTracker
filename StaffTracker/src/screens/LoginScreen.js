@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { isAuthenticated, getStoredAuth } from '../auth/authService';
-import { syncData, loadRemoteData, initSyncManager, addSyncListener, removeSyncListener } from '../services/syncManager';
+import { syncData, loadRemoteData, initSyncManager, addSyncListener, removeSyncListener, manualSync } from '../services/syncManager';
 import { initUserDB, saveUser, getUserByGoogleId } from '../database/userDb';
 
 GoogleSignin.configure({

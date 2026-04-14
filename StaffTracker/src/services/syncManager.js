@@ -6,7 +6,10 @@ import {
   saveToLocalCache, 
   loadFromLocalCache
 } from './driveService';
-import { exportToJSON, importFromJSON } from './jsonDataService';
+import { exportToJSON as exportFromDB, importFromJSON as importToDB } from '../database/db';
+import { initDatabase } from '../database/db';
+import { getCurrentUser } from '../database/userDb';
+import { Alert } from 'react-native';
 import dayjs from 'dayjs';
 
 let authStorage = {
@@ -119,6 +122,168 @@ const getFreshToken = async () => {
   }
 };
 
+export const manualSync = async (onSyncChoice) => {
+  if (isSyncing) {
+    return { success: false, reason: 'already_syncing' };
+  }
+  
+  isSyncing = true;
+  notifyListeners({ type: 'sync_start' });
+  
+  let accessToken = null;
+  let currentUser = null;
+  
+  try {
+    console.log('[ManualSync] Starting manual sync...');
+    
+    currentUser = await getCurrentUser();
+    const googleId = currentUser?.google_id || null;
+    console.log('[ManualSync] User google_id:', googleId);
+    
+    try {
+      await initDatabase();
+    } catch (dbError) {
+      console.log('[ManualSync] DB init error:', dbError.message);
+    }
+    
+    accessToken = await getFreshToken();
+    if (!accessToken) {
+      console.log('[ManualSync] No valid token - not logged in');
+      isSyncing = false;
+      return { success: false, error: 'session_expired' };
+    }
+    console.log('[ManualSync] Token available');
+    
+    console.log('[ManualSync] Getting local data...');
+    const localData = await exportFromDB(googleId);
+    const localParsed = JSON.parse(localData);
+    console.log('[ManualSync] Local data exported:', {
+      staff: localParsed.metadata?.staffCount || 0,
+      attendance: localParsed.metadata?.attendanceCount || 0,
+      payments: localParsed.metadata?.paymentCount || 0,
+      deletedStaff: localParsed.metadata?.deletedStaffCount || 0
+    });
+    
+    let remoteData = null;
+    let fileNotFound = false;
+    try {
+      remoteData = await downloadJSON(accessToken, googleId);
+      console.log('[ManualSync] Remote data fetched:', !!remoteData);
+    } catch (error) {
+      console.log('[ManualSync] No remote data (first time):', error.message);
+      fileNotFound = true;
+    }
+    
+    if (remoteData && !fileNotFound) {
+      const remoteParsed = JSON.parse(remoteData);
+      console.log('[ManualSync] Remote data:', {
+        staff: remoteParsed.metadata?.staffCount || 0,
+        attendance: remoteParsed.metadata?.attendanceCount || 0,
+        payments: remoteParsed.metadata?.paymentCount || 0,
+        deletedStaff: remoteParsed.metadata?.deletedStaffCount || 0
+      });
+      
+      isSyncing = false;
+      
+      if (onSyncChoice) {
+        const choice = await onSyncChoice(remoteParsed);
+        
+        if (choice === 'cancel') {
+          console.log('[ManualSync] User cancelled');
+          notifyListeners({ type: 'sync_cancelled' });
+          return { success: true, cancelled: true };
+        }
+        
+        isSyncing = true;
+        
+        if (choice === 'restore') {
+          console.log('[ManualSync] User chose Restore (replace)');
+          await importToDB(remoteData, 'replace', googleId);
+          
+          try {
+            await saveToLocalCache(remoteData, googleId);
+          } catch (cacheError) {
+            console.log('[ManualSync] Cache update skipped:', cacheError.message);
+          }
+          
+          console.log('[ManualSync] Restore complete');
+        } else if (choice === 'merge') {
+          console.log('[ManualSync] User chose Merge');
+          await importToDB(remoteData, 'merge', googleId);
+          
+          try {
+            await saveToLocalCache(remoteData, googleId);
+          } catch (cacheError) {
+            console.log('[ManualSync] Cache update skipped:', cacheError.message);
+          }
+          
+          console.log('[ManualSync] Merge complete');
+        }
+      }
+    } else {
+      const staffCount = localParsed.metadata?.staffCount || 0;
+      const attendanceCount = localParsed.metadata?.attendanceCount || 0;
+      const paymentCount = localParsed.metadata?.paymentCount || 0;
+      
+      if (staffCount === 0 && attendanceCount === 0 && paymentCount === 0) {
+        console.log('[ManualSync] WARNING: Local data is empty, skipping upload');
+        isSyncing = false;
+        notifyListeners({ type: 'sync_complete', timestamp: new Date() });
+        return { success: true, skipped: true, reason: 'empty_data' };
+      }
+      
+      console.log('[ManualSync] Uploading local data to Drive, counts:', { staffCount, attendanceCount, paymentCount });
+      const uploadResult = await uploadJSON(accessToken, localData, googleId);
+      if (!uploadResult) {
+        console.log('[ManualSync] Upload failed, retrying...');
+        accessToken = await getFreshToken();
+        if (accessToken) {
+          await uploadJSON(accessToken, localData, googleId);
+        }
+      }
+      
+      await setLastSyncTime();
+      await clearPendingChanges();
+      
+      isSyncing = false;
+      notifyListeners({ 
+        type: 'sync_complete', 
+        timestamp: new Date(),
+        staffCount: localParsed.metadata?.staffCount || 0
+      });
+      
+      return { success: true, uploaded: true };
+    }
+    
+    await setLastSyncTime();
+    await clearPendingChanges();
+    
+    isSyncing = false;
+    notifyListeners({ 
+      type: 'sync_complete', 
+      timestamp: new Date()
+    });
+    
+    return { success: true };
+  } catch (error) {
+    console.log('[ManualSync] Overall error:', error.message);
+    isSyncing = false;
+    
+    try {
+      await queuePendingChange('manual_sync');
+    } catch (queueError) {
+      console.log('[ManualSync] Queue skipped:', queueError.message);
+    }
+    
+    notifyListeners({ 
+      type: 'sync_error', 
+      error: error.message 
+    });
+    
+    return { success: false, error: error.message };
+  }
+};
+
 export const syncData = async (forceUpload = false) => {
   if (isSyncing) {
     return { success: false, reason: 'already_syncing' };
@@ -128,42 +293,20 @@ export const syncData = async (forceUpload = false) => {
   notifyListeners({ type: 'sync_start' });
   
   let accessToken = null;
+  let currentUser = null;
+  
   try {
     console.log('[Sync] Starting sync...');
     
-    const { initJsonDatabase, isDBReady } = await import('./jsonDataService');
+    currentUser = await getCurrentUser();
+    const googleId = currentUser?.google_id || null;
+    console.log('[Sync] User google_id:', googleId);
     
-    if (!isDBReady()) {
-      console.log('[Sync] Database initializing...');
-      try {
-        await initJsonDatabase();
-      } catch (dbError) {
-        console.log('[Sync] DB init error (will try export anyway):', dbError.message);
-      }
-    }
-    
-    if (!isDBReady()) {
-      console.log('[Sync] DB not ready, using empty data');
-      const localData = JSON.stringify({
-        version: '1.0.0',
-        exportedAt: new Date().toISOString(),
-        staff: [],
-        attendance: [],
-        payments: [],
-        settings: {},
-        metadata: { lastModified: new Date().toISOString(), appVersion: '1.0.0' }
-      });
-      accessToken = await getFreshToken();
-      if (!accessToken) {
-        isSyncing = false;
-        return { success: false, error: 'session_expired' };
-      }
-      console.log('[Sync] Uploading empty data (no DB)...');
-      const result = await uploadJSON(accessToken, localData);
-      if (result) {
-        isSyncing = false;
-        return { success: true };
-      }
+    try {
+      await initDatabase();
+      console.log('[Sync] Database initialized');
+    } catch (dbError) {
+      console.log('[Sync] DB init error:', dbError.message);
     }
     
     accessToken = await getFreshToken();
@@ -175,11 +318,12 @@ export const syncData = async (forceUpload = false) => {
     console.log('[Sync] Token available');
     
     console.log('[Sync] Getting local data...');
-    const localData = await exportToJSON();
-    console.log('[Sync] Local data exported, size:', localData?.length);
+    const localData = await exportFromDB(googleId);
+    const localParsed = JSON.parse(localData);
+    console.log('[Sync] Local data exported, staff:', localParsed.metadata?.staffCount || 0);
     
     try {
-      await saveToLocalCache(localData);
+      await saveToLocalCache(localData, googleId);
     } catch (cacheError) {
       console.log('[Sync] Cache save skipped:', cacheError.message);
     }
@@ -187,7 +331,7 @@ export const syncData = async (forceUpload = false) => {
     let remoteData = null;
     let fileNotFound = false;
     try {
-      remoteData = await downloadJSON(accessToken);
+      remoteData = await downloadJSON(accessToken, googleId);
       console.log('[Sync] Remote data fetched:', !!remoteData);
     } catch (error) {
       console.log('[Sync] No remote data (first time upload):', error.message);
@@ -203,7 +347,7 @@ export const syncData = async (forceUpload = false) => {
         
         if (remoteModified > localModified) {
           mergedData = remoteData;
-          await importFromJSON(mergedData, 'replace');
+          await importToDB(mergedData, 'replace', googleId);
           try {
             await saveToLocalCache(mergedData);
           } catch (cacheError) {
@@ -215,16 +359,44 @@ export const syncData = async (forceUpload = false) => {
       }
     }
     
-    console.log('[Sync] Uploading data to Drive...');
-    const uploadResult = await uploadJSON(accessToken, mergedData);
-    if (!uploadResult) {
-      console.log('[Sync] Upload failed');
-      accessToken = await getFreshToken();
-      if (accessToken) {
-        console.log('[Sync] Retrying with fresh token...');
-        await uploadJSON(accessToken, mergedData);
-      }
+    const staffCount = localParsed.metadata?.staffCount || 0;
+    const attendanceCount = localParsed.metadata?.attendanceCount || 0;
+    const paymentCount = localParsed.metadata?.paymentCount || 0;
+    const remoteStaffCount = remoteData ? JSON.parse(remoteData).metadata?.staffCount || 0 : 0;
+    
+    console.log('[Sync] Sync decision:', {
+      localStaff: staffCount,
+      localAttendance: attendanceCount,
+      localPayments: paymentCount,
+      remoteStaff: remoteStaffCount
+    });
+    
+    const hasLocalData = staffCount > 0 || attendanceCount > 0 || paymentCount > 0;
+    const hasRemoteData = remoteStaffCount > 0;
+    
+    if (!hasLocalData && !hasRemoteData) {
+      console.log('[Sync] No data to sync - both local and remote empty');
+      isSyncing = false;
+      notifyListeners({ type: 'sync_complete', timestamp: new Date() });
+      return { success: true, skipped: true, reason: 'no_data' };
     }
+    
+    if (hasLocalData) {
+      console.log('[Sync] Uploading data to Drive, counts:', { staffCount, attendanceCount, paymentCount });
+      const uploadResult = await uploadJSON(accessToken, mergedData, googleId);
+      if (!uploadResult) {
+        console.log('[Sync] Upload failed, retrying...');
+        accessToken = await getFreshToken();
+        if (accessToken) {
+          await uploadJSON(accessToken, mergedData, googleId);
+        }
+      }
+    } else if (hasRemoteData && !forceUpload) {
+      console.log('[Sync] Remote has data, local empty - auto restore');
+      mergedData = remoteData;
+      await importToDB(mergedData, 'replace', googleId);
+    }
+    
     await setLastSyncTime();
     await clearPendingChanges();
     
@@ -266,18 +438,21 @@ export const loadRemoteData = async () => {
       throw new Error('No access token');
     }
     
-    const remoteData = await downloadJSON(accessToken);
+    const currentUser = await getCurrentUser();
+    const googleId = currentUser?.google_id || null;
+    
+    const remoteData = await downloadJSON(accessToken, googleId);
     
     if (!remoteData) {
       return { success: true, data: null, isNew: false };
     }
     
-    await importFromJSON(remoteData, 'replace');
-    await saveToLocalCache(remoteData);
+    await importToDB(remoteData, 'replace', googleId);
+    await saveToLocalCache(remoteData, googleId);
     
     return { success: true, data: JSON.parse(remoteData), isNew: true };
   } catch (error) {
-    const cachedData = await loadFromLocalCache();
+    const cachedData = await loadFromLocalCache(googleId);
     if (cachedData) {
       return { success: true, data: JSON.parse(cachedData), isNew: false, fromCache: true };
     }

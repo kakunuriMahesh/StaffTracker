@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Switch, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { getSyncSettings, saveSyncSettings, SYNC_FREQUENCY, syncData, getLastSyncTime, processPendingChanges } from '../services/syncManager';
+import { getSyncSettings, saveSyncSettings, SYNC_FREQUENCY, manualSync, getLastSyncTime } from '../services/syncManager';
 import { logout as authLogout, isAuthenticated } from '../auth/authService';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { getCurrentUser, deleteUser } from '../database/userDb';
@@ -12,15 +12,27 @@ export default function SyncSettingsScreen({ navigation }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
     loadSettings();
     checkLoginStatus();
+    loadUserInfo();
   }, []);
 
   const checkLoginStatus = async () => {
     const loggedIn = await isAuthenticated();
     setIsLoggedIn(loggedIn);
+  };
+
+  const loadUserInfo = async () => {
+    try {
+      const user = await getCurrentUser();
+      setCurrentUser(user);
+      console.log('[SyncSettings] User loaded:', user?.email, user?.google_id);
+    } catch (error) {
+      console.log('[SyncSettings] Error loading user:', error.message);
+    }
   };
 
   const loadSettings = async () => {
@@ -53,10 +65,47 @@ export default function SyncSettingsScreen({ navigation }) {
 
   const handleManualSync = async () => {
     setIsSyncing(true);
+    
+    const handleSyncChoice = (remoteData) => {
+      return new Promise((resolve) => {
+        const remoteStaffCount = remoteData.metadata?.staffCount || 0;
+        const remoteDeletedCount = remoteData.metadata?.deletedStaffCount || 0;
+        
+        Alert.alert(
+          'Sync Data Found',
+          `Remote backup contains:\n• ${remoteStaffCount} staff members\n• ${remoteDeletedCount} deleted records\n\nChoose how to sync:`,
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+              onPress: () => resolve('cancel')
+            },
+            {
+              text: 'Merge',
+              onPress: () => resolve('merge')
+            },
+            {
+              text: 'Restore',
+              style: 'destructive',
+              onPress: () => resolve('restore')
+            }
+          ]
+        );
+      });
+    };
+    
     try {
-      const result = await syncData(true);
+      const result = await manualSync(handleSyncChoice);
+      
       if (result.success) {
-        Alert.alert('Sync Success', 'Data synced successfully!');
+        if (result.cancelled) {
+          Alert.alert('Sync Cancelled', 'No changes were made.');
+        } else if (result.uploaded) {
+          Alert.alert('Sync Success', 'Local data uploaded to Google Drive!');
+        } else {
+          Alert.alert('Sync Success', 'Data synced successfully!');
+        }
+        
         const lastSyncTime = await getLastSyncTime();
         setLastSync(lastSyncTime);
       } else {
@@ -130,6 +179,26 @@ export default function SyncSettingsScreen({ navigation }) {
       </View>
 
       <ScrollView style={styles.content}>
+        {isLoggedIn && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Account</Text>
+            <View style={styles.card}>
+              <View style={styles.userRow}>
+                <View style={styles.userIconContainer}>
+                  <Ionicons name="person" size={24} color="#2563EB" />
+                </View>
+                <View style={styles.userInfo}>
+                  <Text style={styles.userName}>{currentUser?.name || 'Unknown'}</Text>
+                  <Text style={styles.userEmail}>{currentUser?.email || 'No email'}</Text>
+                </View>
+              </View>
+              {currentUser?.google_id && (
+                <Text style={styles.userId}>ID: {currentUser.google_id.substring(0, 12)}...</Text>
+              )}
+            </View>
+          </View>
+        )}
+
         {isLoggedIn && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Sync Status</Text>
@@ -370,5 +439,38 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#DC2626',
     marginLeft: 8,
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  userIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  userEmail: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  userId: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
 });

@@ -10,7 +10,6 @@ import * as Linking from 'expo-linking';
 
 import { initDatabase } from './src/database/db';
 import { initUserDB } from './src/database/userDb';
-import { initJsonDatabase } from './src/services/jsonDataService';
 import { syncData, addSyncListener, removeSyncListener, initSyncManager, stopSyncManager } from './src/services/syncManager';
 
 import HomeScreen        from './src/screens/HomeScreen';
@@ -105,10 +104,6 @@ export default function App() {
         console.log('[App] Initializing staff database...');
         await initDatabase();
         console.log('[App] Staff database ready');
-        
-        console.log('[App] Initializing JSON database...');
-        await initJsonDatabase();
-        console.log('[App] JSON database ready');
         
         console.log('[App] Initializing user database...');
         await initUserDB();

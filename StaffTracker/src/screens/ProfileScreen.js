@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { getAllStaff, getAllAdvances } from '../database/db';
 import { getUserData, logout, isAuthenticated } from '../auth/authService';
+import { getCurrentUser } from '../database/userDb';
 
 const APP_VERSION = '1.0.0';
 const BUILD_NUMBER = '1';
@@ -35,18 +36,25 @@ export default function ProfileScreen({ navigation }) {
       
       let user = await getUserData();
       
+      let dbUser = null;
+      try {
+        dbUser = await getCurrentUser();
+      } catch (e) {
+        console.log('[Profile] getCurrentUser error:', e.message);
+      }
+      
       setStats({
         totalStaff: staffList?.length || 0,
         activeStaff: staffList?.length || 0,
         totalAdvances: advancesList?.length || 0,
       });
       
-      if (user) {
+      if (user || dbUser) {
         setUserData({
-          name: user.name,
-          email: user.email,
-          photoURL: user.photoURL,
-          id: user.id,
+          name: user?.name || dbUser?.name || 'Unknown',
+          email: user?.email || dbUser?.email || 'No email',
+          photoURL: user?.photoURL || user?.photo || null,
+          googleId: dbUser?.google_id || user?.google_id || null,
         });
       }
     } catch (error) {
