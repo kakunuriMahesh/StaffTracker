@@ -274,6 +274,21 @@ export async function deleteAdvance(id) {
   }
 }
 
+export async function updateAdvance(id, amount, date, note) {
+  await ensureLoaded();
+  
+  const index = advancesCache.findIndex(a => a.id === id);
+  if (index !== -1) {
+    const now = new Date().toISOString();
+    advancesCache[index].amount = parseFloat(amount);
+    advancesCache[index].date = date;
+    advancesCache[index].note = note || '';
+    advancesCache[index].updated_at = now;
+    await saveAdvances(advancesCache);
+    console.log('[DB] Advance updated:', id);
+  }
+}
+
 export async function getMonthlyAdvances(staffId, year, month) {
   await ensureLoaded();
   

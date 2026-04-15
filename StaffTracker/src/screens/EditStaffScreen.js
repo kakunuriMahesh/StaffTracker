@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Pressable, Platform, FlatList, Keyboard } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Pressable, Platform, FlatList, Keyboard, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
@@ -12,6 +12,7 @@ const DURATION_TYPES = [
   { key: 'monthly', label: 'Monthly' },
   { key: 'manual', label: 'Manual' },
 ];
+const QUICK_SELECT_AMOUNTS = [100, 500, 1000];
 
 export default function EditStaffScreen({ route, navigation }) {
   const { staffId } = route.params;
@@ -479,6 +480,21 @@ export default function EditStaffScreen({ route, navigation }) {
               ₹{parseFloat(salary || 0).toLocaleString('en-IN')} {salaryType === 'daily' ? 'per day' : 'per month'}
             </Text>
           )}
+          {salaryType !== 'manual' && (
+            <View style={styles.quickSelectRow}>
+              {QUICK_SELECT_AMOUNTS.map(amount => (
+                <TouchableOpacity
+                  key={amount}
+                  style={[styles.quickSelectBtn, parseFloat(salary) === amount && styles.quickSelectBtnActive]}
+                  onPress={() => setSalary(String(amount))}
+                >
+                  <Text style={[styles.quickSelectText, parseFloat(salary) === amount && styles.quickSelectTextActive]}>
+                    ₹{amount}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
 
         <View style={[styles.inputGroup, styles.cardStyle]}>
@@ -498,9 +514,15 @@ export default function EditStaffScreen({ route, navigation }) {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.saveBtn} onPress={save}>
-          <Ionicons name="checkmark-circle" size={22} color="#fff" style={{ marginRight: 8 }} />
-          <Text style={styles.saveBtnText}>Update Staff</Text>
+        <TouchableOpacity style={[styles.saveBtn, saving && styles.saveBtnDisabled]} onPress={save} disabled={saving}>
+          {saving ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle" size={22} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.saveBtnText}>Update Staff</Text>
+            </>
+          )}
         </TouchableOpacity>
       </ScrollView>
 
@@ -623,6 +645,19 @@ const styles = StyleSheet.create({
   currencySymbol: { fontSize: 16, fontWeight: '600', color: '#059669', marginLeft: 8, marginRight: 2 },
   salaryInput: { paddingLeft: 0 },
   salaryHint: { fontSize: 13, color: '#059669', marginTop: 10, fontWeight: '500' },
+  quickSelectRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  quickSelectBtn: { 
+    flex: 1, 
+    paddingVertical: 10, 
+    borderRadius: 8, 
+    borderWidth: 1.5, 
+    borderColor: '#E2E8F0', 
+    backgroundColor: '#F8FAFC', 
+    alignItems: 'center',
+  },
+  quickSelectBtnActive: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
+  quickSelectText: { fontSize: 14, fontWeight: '600', color: '#64748B' },
+  quickSelectTextActive: { color: '#fff' },
   saveBtn: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -638,6 +673,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  saveBtnDisabled: { opacity: 0.7 },
   modalOverlay: { 
     flex: 1, 
     backgroundColor: 'rgba(0, 0, 0, 0.5)', 

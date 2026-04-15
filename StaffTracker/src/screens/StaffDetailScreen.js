@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, Modal, TextInput
+  Alert, Modal, TextInput, ActivityIndicator
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -11,7 +11,7 @@ import dayjs from 'dayjs';
 import {
   getStaffById, deleteStaff,
   getAttendanceByStaffAndMonth, getMonthlyAdvances,
-  addAdvance, deleteAdvance
+  addAdvance, deleteAdvance, updateAdvance
 } from '../database/db';
 import { calculateSalary } from '../utils/salary';
 import { syncData } from '../services/syncManager';
@@ -19,6 +19,7 @@ import { syncData } from '../services/syncManager';
 const STATUS_BG   = { P: '#D1FAE5', A: '#FEE2E2', L: '#FEF3C7' };
 const STATUS_FG   = { P: '#065F46', A: '#991B1B', L: '#92400E' };
 const STATUS_ICON = { P: 'checkmark-circle', A: 'close-circle', L: 'time-outline' };
+const QUICK_SELECT_AMOUNTS = [100, 500, 1000];
 
 export default function StaffDetailScreen({ route, navigation }) {
   const { staffId } = route.params;
@@ -33,6 +34,8 @@ export default function StaffDetailScreen({ route, navigation }) {
   const [advAmount,  setAdvAmount]  = useState('');
   const [advDate,    setAdvDate]    = useState(dayjs().format('YYYY-MM-DD'));
   const [advNote,    setAdvNote]    = useState('');
+  const [editingAdvId, setEditingAdvId] = useState(null);
+  const [savingAdv, setSavingAdv] = useState(false);
 
   const load = useCallback(async () => {
     const s = await getStaffById(staffId);
@@ -104,12 +107,30 @@ export default function StaffDetailScreen({ route, navigation }) {
       Alert.alert('Invalid', 'Please enter a valid amount.');
       return;
     }
-    await addAdvance(staffId, parseFloat(advAmount), advDate, advNote);
-    await syncData();
-    setModal(false);
-    setAdvAmount('');
-    setAdvNote('');
-    load();
+    setSavingAdv(true);
+    try {
+      if (editingAdvId) {
+        await updateAdvance(editingAdvId, parseFloat(advAmount), advDate, advNote);
+      } else {
+        await addAdvance(staffId, parseFloat(advAmount), advDate, advNote);
+      }
+      await syncData();
+      setModal(false);
+      setAdvAmount('');
+      setAdvNote('');
+      setEditingAdvId(null);
+      load();
+    } finally {
+      setSavingAdv(false);
+    }
+  };
+
+  const openEditAdvance = (adv) => {
+    setAdvAmount(String(adv.amount));
+    setAdvDate(adv.date);
+    setAdvNote(adv.note || '');
+    setEditingAdvId(adv.id);
+    setModal(true);
   };
 
   const handleDeleteAdvance = (id) => {
@@ -307,10 +328,36 @@ export default function StaffDetailScreen({ route, navigation }) {
             <Ionicons name="cash-outline" size={18} color="#111827" />
             <Text style={styles.sectionTitle}>Advance Payments</Text>
           </View>
-          <TouchableOpacity style={styles.addAdvanceBtn} onPress={() => setModal(true)}>
-            <Ionicons name="add-circle-outline" size={20} color="#2563EB" />
-            <Text style={styles.addAdvanceText}>Add Advance</Text>
-          </TouchableOpacity>
+          {advances.length > 0 ? (
+            advances.map(adv => (
+              <View key={adv.id} style={styles.advanceItem}>
+                <View style={styles.advanceInfo}>
+                  <Text style={styles.advanceAmount}>₹{adv.amount}</Text>
+                  <Text style={styles.advanceDate}>{dayjs(adv.date).format('DD MMM YYYY')}</Text>
+                  {adv.note ? <Text style={styles.advanceNote}>{adv.note}</Text> : null}
+                </View>
+                <View style={styles.advanceActions}>
+                  <TouchableOpacity onPress={() => openEditAdvance(adv)} style={styles.headerBtn}>
+                    <Ionicons name="create-outline" size={18} color="#2563EB" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleDeleteAdvance(adv.id)} style={styles.headerBtn}>
+                    <Ionicons name="trash-outline" size={18} color="#DC2626" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          ) : (
+            <TouchableOpacity style={styles.addAdvanceBtn} onPress={() => setModal(true)}>
+              <Ionicons name="add-circle-outline" size={20} color="#2563EB" />
+              <Text style={styles.addAdvanceText}>Add Advance</Text>
+            </TouchableOpacity>
+          )}
+          {(advances.length > 0) && (
+            <TouchableOpacity style={styles.addAdvanceBtn} onPress={() => setModal(true)}>
+              <Ionicons name="add-circle-outline" size={20} color="#2563EB" />
+              <Text style={styles.addAdvanceText}>Add More</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
       </ScrollView>
@@ -319,8 +366,8 @@ export default function StaffDetailScreen({ route, navigation }) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Advance Payment</Text>
-              <TouchableOpacity onPress={() => setModal(false)}>
+              <Text style={styles.modalTitle}>{editingAdvId ? 'Edit Advance Payment' : 'Add Advance Payment'}</Text>
+              <TouchableOpacity onPress={() => { setModal(false); setEditingAdvId(null); setAdvAmount(''); setAdvNote(''); }}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
@@ -336,6 +383,19 @@ export default function StaffDetailScreen({ route, navigation }) {
                   placeholder="Enter amount"
                   placeholderTextColor="#9CA3AF"
                 />
+              </View>
+              <View style={styles.quickSelectRow}>
+                {QUICK_SELECT_AMOUNTS.map(amount => (
+                  <TouchableOpacity
+                    key={amount}
+                    style={[styles.quickSelectBtn, parseFloat(advAmount) === amount && styles.quickSelectBtnActive]}
+                    onPress={() => setAdvAmount(String(amount))}
+                  >
+                    <Text style={[styles.quickSelectText, parseFloat(advAmount) === amount && styles.quickSelectTextActive]}>
+                      ₹{amount}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             </View>
             <View style={styles.inputGroup}>
@@ -368,9 +428,15 @@ export default function StaffDetailScreen({ route, navigation }) {
               <TouchableOpacity style={styles.modalCancel} onPress={() => setModal(false)}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalSave} onPress={handleAddAdvance}>
-                <Ionicons name="checkmark" size={18} color="#fff" style={{ marginRight: 6 }} />
-                <Text style={styles.modalSaveText}>Save</Text>
+              <TouchableOpacity style={[styles.modalSave, savingAdv && styles.saveBtnDisabled]} onPress={handleAddAdvance} disabled={savingAdv}>
+                {savingAdv ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark" size={18} color="#fff" style={{ marginRight: 6 }} />
+                    <Text style={styles.modalSaveText}>Save</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -442,7 +508,27 @@ const styles = StyleSheet.create({
   modalCancelText: { fontWeight: '600', color: '#6B7280' },
   modalSave: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2563EB', padding: 14, borderRadius: 10 },
   modalSaveText: { fontWeight: '600', color: '#fff' },
+  saveBtnDisabled: { opacity: 0.7 },
   noteItem: { backgroundColor: '#F9FAFB', borderRadius: 10, padding: 12, marginBottom: 10 },
+  quickSelectRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  quickSelectBtn: { 
+    flex: 1, 
+    paddingVertical: 8, 
+    borderRadius: 8, 
+    borderWidth: 1, 
+    borderColor: '#E5E7EB', 
+    backgroundColor: '#F3F4F6', 
+    alignItems: 'center',
+  },
+  quickSelectBtnActive: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
+  quickSelectText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
+  quickSelectTextActive: { color: '#fff' },
+  advanceItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, backgroundColor: '#F9FAFB', borderRadius: 10, marginBottom: 8 },
+  advanceInfo: { flex: 1 },
+  advanceAmount: { fontSize: 15, fontWeight: '600', color: '#111827' },
+  advanceDate: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  advanceNote: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+  advanceActions: { flexDirection: 'row', gap: 8 },
   noteDateRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   noteDate: { fontSize: 12, color: '#6B7280', marginLeft: 6 },
   noteText: { fontSize: 14, color: '#374151', lineHeight: 20 },
