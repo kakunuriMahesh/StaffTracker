@@ -7,6 +7,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { getAllStaff, getAllAdvances } from '../database/db';
 import { getUserData, logout, isAuthenticated } from '../auth/authService';
 import { getCurrentUser } from '../database/userDb';
+import { getPlanDetails, PLAN_LABELS, formatExpiryDate } from '../services/planService';
 
 const APP_VERSION = '1.0.0';
 const BUILD_NUMBER = '1';
@@ -22,6 +23,7 @@ export default function ProfileScreen({ navigation }) {
     totalAdvances: 0,
   });
   const [userData, setUserData] = useState(null);
+  const [planDetails, setPlanDetails] = useState({ userPlan: 'free', planExpiry: null, isActive: true });
 
   useFocusEffect(
     React.useCallback(() => {
@@ -33,6 +35,13 @@ export default function ProfileScreen({ navigation }) {
     try {
       const staffList = await getAllStaff();
       const advancesList = await getAllAdvances();
+      
+      let planInfo = { userPlan: 'free', planExpiry: null, isActive: true };
+      try {
+        planInfo = await getPlanDetails();
+      } catch (e) {
+        console.log('[Profile] getPlanDetails error:', e.message);
+      }
       
       let user = await getUserData();
       
@@ -48,6 +57,8 @@ export default function ProfileScreen({ navigation }) {
         activeStaff: staffList?.length || 0,
         totalAdvances: advancesList?.length || 0,
       });
+      
+      setPlanDetails(planInfo);
       
       if (user || dbUser) {
         setUserData({
@@ -146,6 +157,32 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.statNumber}>{stats.totalAdvances}</Text>
             <Text style={styles.statLabel}>Advances</Text>
           </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Subscription</Text>
+          
+          <TouchableOpacity 
+            style={styles.menuItem}
+            onPress={() => navigation.navigate('Upgrade')}
+          >
+            <View style={styles.menuItemLeft}>
+              <View style={[styles.menuIcon, { backgroundColor: planDetails.isActive ? '#DCFCE7' : '#FEE2E2' }]}>
+                <Ionicons name="card" size={20} color={planDetails.isActive ? '#16A34A' : '#DC2626'} />
+              </View>
+              <View>
+                <Text style={styles.menuTitle}>Plan</Text>
+                <Text style={styles.menuSubtitle}>
+                  {PLAN_LABELS[planDetails.userPlan] || 'Free'}
+                  {planDetails.userPlan !== 'free' && planDetails.userPlan !== 'lifetime' && planDetails.planExpiry 
+                    ? ` (Expires ${formatExpiryDate(planDetails.planExpiry)})` 
+                    : planDetails.userPlan === 'lifetime' ? ' (Lifetime)' 
+                    : ''}
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.section}>

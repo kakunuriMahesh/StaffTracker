@@ -1,5 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import dayjs from 'dayjs';
+import { getUserPlan } from '../services/planService';
 
 const DB_NAME = 'stafftracker.db';
 
@@ -379,6 +380,13 @@ export const exportToJSON = async (googleId = null) => {
       });
     }
     
+    let planData = { userPlan: 'free', planExpiry: null };
+    try {
+      planData = await getUserPlan();
+    } catch (e) {
+      console.log('[JSONData] Could not get plan data:', e);
+    }
+    
     const data = {
       version: '1.0.0',
       exportedAt: new Date().toISOString(),
@@ -444,7 +452,11 @@ export const exportToJSON = async (googleId = null) => {
         date: a.date,
         deletedAt: a.deleted_at
       })),
-      settings: settingsObj,
+      settings: {
+        ...settingsObj,
+        userPlan: planData.userPlan || 'free',
+        planExpiry: planData.planExpiry,
+      },
       metadata: {
         lastModified: new Date().toISOString(),
         appVersion: '1.0.0',

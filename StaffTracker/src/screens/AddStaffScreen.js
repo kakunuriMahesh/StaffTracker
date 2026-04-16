@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Pressable, Platform, FlatList, Keyboard, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
-import { addStaff } from '../database/db';
+import { addStaff, getAllStaff } from '../database/db';
 import { syncData } from '../services/syncManager';
+import { canAddStaff } from '../services/planService';
+import { showUpgradeAlert } from '../utils/upgradeHelper';
 import { Calendar } from 'react-native-calendars';
 
 const DEFAULT_ROLES = ['Maid', 'Cook', 'Driver', 'Gardener', 'Security', 'Watchman', 'Other'];
@@ -176,6 +178,19 @@ export default function AddStaffScreen({ navigation }) {
         Alert.alert('Validation Error', errorList[0]);
       }
       return;
+    }
+
+    try {
+      const staffList = await getAllStaff();
+      const staffCount = staffList.length;
+      const allowed = await canAddStaff(staffCount);
+      
+      if (!allowed) {
+        showUpgradeAlert(navigation);
+        return;
+      }
+    } catch (error) {
+      console.log('[AddStaff] Error checking plan:', error);
     }
 
     setSaving(true);

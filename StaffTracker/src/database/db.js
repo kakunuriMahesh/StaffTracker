@@ -1,4 +1,5 @@
 import { loadStaff, saveStaff, loadAttendance, saveAttendance, loadAdvances, saveAdvances } from '../storage/localStorage';
+import { getUserPlan } from '../services/planService';
 
 let staffCache = null;
 let attendanceCache = null;
@@ -340,6 +341,13 @@ export const exportToJSON = async (googleId = null) => {
   console.log('[DB] Active attendance count:', activeAttendance.length);
   console.log('[DB] Active advances count:', activeAdvances.length);
   
+  let planData = { userPlan: 'free', planExpiry: null };
+  try {
+    planData = await getUserPlan();
+  } catch (e) {
+    console.log('[DB] Could not get plan data:', e);
+  }
+  
   const data = {
     version: '1.0.0',
     exportedAt: new Date().toISOString(),
@@ -405,7 +413,10 @@ export const exportToJSON = async (googleId = null) => {
       date: a.date,
       deletedAt: a.deleted_at
     })),
-    settings: {},
+    settings: {
+      userPlan: planData.userPlan || 'free',
+      planExpiry: planData.planExpiry,
+    },
     metadata: {
       lastModified: new Date().toISOString(),
       appVersion: '1.0.0',
