@@ -12,8 +12,8 @@ import { getPlanDetails, PLAN_LABELS, formatExpiryDate } from '../services/planS
 const APP_VERSION = '1.0.0';
 const BUILD_NUMBER = '1';
 
-const TERMS_URL = 'https://yourdomain.com/terms-and-conditions.html';
-const PRIVACY_URL = 'https://yourdomain.com/privacy-policy.html';
+const TERMS_URL = 'https://lemonchiffon-heron-497115.hostingersite.com/terms-conditions-staffTracker.html';
+const PRIVACY_URL = 'https://lemonchiffon-heron-497115.hostingersite.com/PricacyPolicy-StaffTracker.html';
 
 export default function ProfileScreen({ navigation }) {
   const insets = useSafeAreaInsets();

@@ -4,10 +4,10 @@
     "slug": "StaffTracker",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "https://res.cloudinary.com/drqjqmsye/image/upload/v1776413303/StaffTrackerLogo.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "https://res.cloudinary.com/drqjqmsye/image/upload/v1776413303/StaffTrackerLogo.png",
       "resizeMode": "contain",
       "backgroundColor": "#2563EB"
     },
@@ -19,7 +19,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "https://res.cloudinary.com/drqjqmsye/image/upload/v1776413303/StaffTrackerLogo.png",
         "backgroundColor": "#2563EB"
       },
       "edgeToEdgeEnabled": false,
@@ -35,7 +35,7 @@
       "playStoreUrl": "https://play.google.com/store/apps/details?id=com.srcdesigns.StaffTracker"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "https://res.cloudinary.com/drqjqmsye/image/upload/v1776413303/StaffTrackerLogo.png"
     },
     "scheme": "stafftracker",
     "plugins": [

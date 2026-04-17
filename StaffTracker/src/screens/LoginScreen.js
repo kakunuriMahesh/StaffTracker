@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { isAuthenticated, getStoredAuth } from '../auth/authService';
 import { syncData, loadRemoteData, initSyncManager, addSyncListener, removeSyncListener, manualSync } from '../services/syncManager';
 import { initUserDB, saveUser, getUserByGoogleId } from '../database/userDb';
+
+const APP_LOGO_URL = 'https://res.cloudinary.com/drqjqmsye/image/upload/v1776413303/StaffTrackerLogo.png';
 
 GoogleSignin.configure({
   webClientId: '619998385389-2t8oo9rgu0g6ejt8e409pp9b4bp6pa0o.apps.googleusercontent.com',
@@ -202,7 +204,11 @@ export default function LoginScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <View style={styles.logoContainer}>
-          <Ionicons name="people" size={80} color="#2563EB" />
+          <Image 
+            source={{ uri: APP_LOGO_URL }} 
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
           <Text style={styles.title}>Staff Tracker</Text>
           <Text style={styles.subtitle}>Manage your staff with ease</Text>
         </View>
@@ -256,6 +262,10 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: 'center',
     marginBottom: 48,
+  },
+  logoImage: {
+    width: 120,
+    height: 120,
   },
   title: {
     fontSize: 32,

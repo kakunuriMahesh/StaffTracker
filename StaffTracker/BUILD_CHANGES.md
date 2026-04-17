@@ -1,6 +1,6 @@
 # StaffTracker - Build Configuration Guide
 
-## App Size: 28MB ✅ (Release APK)
+## App Size: <30MB Target ✅ (Release APK/AAB)
 
 ---
 
@@ -43,82 +43,11 @@ Every time you make code changes and want to build:
 
 ---
 
-## Settings to Apply After Prebuild
+## Current Optimized Settings
 
-### 1. `android/gradle.properties`
-
-**File Location:** `D:\SRC-D\MaidCircle\StaffTracker\android\gradle.properties`
-
-**Changes to make (line by line):**
+### 1. `android/gradle.properties` - ALREADY OPTIMIZED
 
 ```properties
-# Line ~31: Change architectures to SINGLE (saves ~50%)
-# BEFORE: reactNativeArchitectures=armeabi-v7a,arm64-v8a,x86,x86_64
-# AFTER:
-reactNativeArchitectures=arm64-v8a
-
-# Line ~38: Disable New Architecture (saves ~30-40MB)
-# BEFORE: newArchEnabled=true
-# AFTER:
-newArchEnabled=false
-
-# Line ~58: Disable network inspector
-# BEFORE: EX_DEV_CLIENT_NETWORK_INSPECTOR=true
-# AFTER:
-EX_DEV_CLIENT_NETWORK_INSPECTOR=false
-
-# Line ~61: Enable legacy packaging for better compression
-# BEFORE: expo.useLegacyPackaging=false
-# AFTER:
-expo.useLegacyPackaging=true
-
-# Line ~47 (enable edge-to-edge - optional, keep false):
-edgeToEdgeEnabled=false
-
-# DISABLE GIF support (saves ~200B)
-expo.gif.enabled=false
-
-# DISABLE webp support (saves ~85KB)
-expo.webp.enabled=false
-
-# ADD at the end of file - Enable minification
-android.enableMinifyInReleaseBuilds=true
-
-# ADD at the end of file - Enable resource shrinking
-android.enableShrinkResourcesInReleaseBuilds=true
-```
-
-### 2. `app.json`
-
-**File Location:** `D:\SRC-D\MaidCircle\StaffTracker\app.json`
-
-**Changes:**
-
-```json
-{
-  "expo": {
-    "android": {
-      "newArchEnabled": false,
-      "edgeToEdgeEnabled": false
-    }
-  }
-}
-```
-
----
-
-## Complete Settings Reference
-
-### `android/gradle.properties` - Full Optimized Version
-
-```properties
-# Project-wide Gradle settings.
-
-org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
-org.gradle.parallel=true
-android.useAndroidX=true
-android.enablePngCrunchInReleaseBuilds=true
-
 # ============== SIZE OPTIMIZATION SETTINGS ==============
 
 # Single architecture only (saves ~50%)
@@ -133,16 +62,16 @@ hermesEnabled=true
 # Disable edge-to-edge (better compatibility)
 edgeToEdgeEnabled=false
 
-# Disable GIF support
+# DISABLE GIF support (saves ~200B)
 expo.gif.enabled=false
 
-# Disable webp support
+# DISABLE webp support (saves ~85KB)
 expo.webp.enabled=false
 
 # Disable animated webp
 expo.webp.animated=false
 
-# Disable network inspector
+# Disable network inspector (saves size)
 EX_DEV_CLIENT_NETWORK_INSPECTOR=false
 
 # Enable legacy packaging (better native lib compression)
@@ -155,17 +84,30 @@ android.enableMinifyInReleaseBuilds=true
 android.enableShrinkResourcesInReleaseBuilds=true
 ```
 
+### 2. `app.json` - ALREADY CONFIGURED
+
+```json
+{
+  "expo": {
+    "android": {
+      "newArchEnabled": false,
+      "edgeToEdgeEnabled": false
+    }
+  }
+}
+```
+
 ---
 
 ## Size Comparison
 
 | Build Type | Without Optimizations | With Optimizations |
 |------------|----------------------|-------------------|
-| Debug APK | ~70MB+ | ~30-40MB |
-| Release APK | ~70MB+ | ~25-35MB |
+| Debug APK | ~70MB+ | ~30-35MB |
+| Release APK | ~70MB+ | ~25-30MB |
 | Release AAB | ~70MB+ | ~25-30MB |
 
-**Current App Size: 28MB** ✅
+**Target: <30MB** ✅
 
 ---
 
@@ -222,27 +164,56 @@ android.enableShrinkResourcesInReleaseBuilds=true
 
 ---
 
-## Play Store Submission Checklist
+## Build Commands (IMPORTANT!)
 
-### Pre-Build
-- [x] Apply optimization settings
-- [x] Test on device (debug APK)
-- [x] Verify all features work
+### Debug APK - For Testing
+```
+Build → Build APK(s) → Debug APK
+```
+⚠️ Debug builds are LARGER (~40MB) because they include dev tools
 
-### Build AAB
-- [x] Generate signing key (one-time)
-- [x] Build → Generate Signed Bundle → Android App Bundle
-- [x] Select `release` variant
-- [x] Sign with your keystore
+### Release APK - For Distribution (<20MB target)
+```
+1. Make code changes
+2. npx expo prebuild --clean
+3. Open Android Studio
+4. Build → Clean Project
+5. Build → Generate Signed Bundle / APK → APK → Release
+6. ✅ Check output size!
+```
+**Release APK should be <30MB**
 
-### Upload to Play Console
-- [ ] Create Play Console account ($25 one-time)
-- [ ] Create new app
-- [ ] Fill store listing (title, description, screenshots)
-- [ ] Upload AAB file
-- [ ] Set pricing (Free or Paid)
-- [ ] Complete content rating questionnaire
-- [ ] Submit for review
+---
+
+## Why Debug is 40MB?
+
+Debug APK includes:
+- JavaScript dev server
+- Network inspector
+- Expo dev client
+- Full error logging
+
+**You MUST build Release variant for smaller size!**
+
+---
+
+## Troubleshooting Size
+
+### Still >30MB after Release build?
+
+1. Check if it's truly a Release build (not Debug)
+2. In Android Studio, verify Build Variant says "release" not "debug"
+3. Clean Project → Rebuild
+
+### Size increased after adding features?
+
+This is expected. Each feature adds native code. For <20MB:
+- Consider removing unused dependencies
+- Use lighter alternatives
+
+---
+
+## File Locations
 
 ---
 
@@ -251,14 +222,13 @@ android.enableShrinkResourcesInReleaseBuilds=true
 ```
 D:\SRC-D\MaidCircle\StaffTracker\
 ├── android/
-│   ├── gradle.properties          ← Edit this after prebuild
+│   ├── gradle.properties          ← OPTIMIZED
 │   └── app/
 │       └── build.gradle
-├── app.json                      ← Edit this after prebuild
-├── terms-and-conditions.html     ← Legal page
-├── privacy-policy.html           ← Legal page
-└── src/
-    └── screens/
+├── app.json                      ← CONFIGURED
+└── docs/
+    ├── terms.html
+    └── privacy-policy.html
 ```
 
 ---
@@ -267,9 +237,9 @@ D:\SRC-D\MaidCircle\StaffTracker\
 
 | Version | Date | Size | Notes |
 |---------|------|------|-------|
-| 1.0.0 | Jan 2025 | 28MB | Initial release |
+| 1.0.0 | Jan 2025 | <30MB | Target size |
 
 ---
 
-**Last Updated:** January 2025
-**Current Size:** 28MB ✅
+**Last Updated:** April 2026
+**Target Size:** <30MB ✅
