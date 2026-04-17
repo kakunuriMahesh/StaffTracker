@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -9,6 +9,8 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { getAllStaff, getAttendanceByStaffAndMonth, getAttendanceByDateRange, getMonthlyAdvances, getAdvancesByDateRange } from '../database/db';
 import { calculateSalary } from '../utils/salary';
+import { applyStaffLocking } from '../utils/staffAccessControl';
+import { addPlanChangeListener } from '../services/planService';
 
 const FILTER_TYPES = [
   { key: 'monthly', label: 'Monthly' },
@@ -31,14 +33,33 @@ export default function MonthlyScreen() {
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [datePickerMode, setDatePickerMode] = useState('start');
 
+  useEffect(() => {
+    const handlePlanChange = () => {
+      console.log('[MonthlyScreen] Plan changed, reloading staff list');
+      loadStaffList();
+    };
+    const removePlanListener = addPlanChangeListener(handlePlanChange);
+    return () => removePlanListener();
+  }, []);
+
   const loadStaffList = async () => {
-    const list = await getAllStaff();
-    setStaff(list);
-    if (list.length > 0 && !selected) {
-      setSelected(list[0]);
-    } else if (list.length > 0 && selected) {
-      const updated = list.find(s => s.id === selected.id);
-      if (!updated) setSelected(list[0]);
+    try {
+      const list = await getAllStaff();
+      if (!list || !Array.isArray(list)) {
+        setStaff([]);
+        return;
+      }
+      const lockedList = await applyStaffLocking(list);
+      setStaff(lockedList || []);
+      if (lockedList && lockedList.length > 0 && !selected) {
+        setSelected(lockedList[0]);
+      } else if (lockedList && lockedList.length > 0 && selected) {
+        const updated = lockedList.find(s => s.id === selected.id);
+        if (!updated) setSelected(lockedList[0]);
+      }
+    } catch (error) {
+      console.log('[MonthlyScreen] loadStaffList error:', error);
+      setStaff([]);
     }
   };
 

@@ -11,6 +11,7 @@ import * as Linking from 'expo-linking';
 import { initDatabase } from './src/database/db';
 import { initUserDB } from './src/database/userDb';
 import { syncData, addSyncListener, removeSyncListener, initSyncManager, stopSyncManager } from './src/services/syncManager';
+import { isPlanExpired } from './src/services/planService';
 
 import HomeScreen        from './src/screens/HomeScreen';
 import DailyScreen       from './src/screens/DailyScreen';
@@ -110,6 +111,21 @@ export default function App() {
         console.log('[App] Initializing user database...');
         await initUserDB();
         console.log('[App] User database ready');
+        
+        const expired = await isPlanExpired();
+        if (expired) {
+          console.log('[App] Plan expired, showing notification');
+          setTimeout(() => {
+            Alert.alert(
+              'Plan Expired',
+              'Your plan has expired. Some features are restricted. Upgrade to unlock all features.',
+              [
+                { text: 'OK', style: 'cancel' },
+                { text: 'Upgrade', onPress: () => {} },
+              ]
+            );
+          }, 500);
+        }
         
         const unsubscribe = NetInfo.addEventListener(async (state) => {
           if (state.isConnected) {

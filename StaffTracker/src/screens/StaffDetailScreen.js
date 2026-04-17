@@ -15,6 +15,7 @@ import {
 } from '../database/db';
 import { calculateSalary } from '../utils/salary';
 import { syncData } from '../services/syncManager';
+import { showLockedAlert } from '../utils/upgradeHelper';
 
 const STATUS_BG   = { P: '#D1FAE5', A: '#FEE2E2', L: '#FEF3C7' };
 const STATUS_FG   = { P: '#065F46', A: '#991B1B', L: '#92400E' };
@@ -22,7 +23,7 @@ const STATUS_ICON = { P: 'checkmark-circle', A: 'close-circle', L: 'time-outline
 const QUICK_SELECT_AMOUNTS = [100, 500, 1000];
 
 export default function StaffDetailScreen({ route, navigation }) {
-  const { staffId } = route.params;
+  const { staffId, isLocked } = route.params;
   const now = dayjs();
   const insets = useSafeAreaInsets();
 
@@ -103,6 +104,10 @@ export default function StaffDetailScreen({ route, navigation }) {
   };
 
   const handleAddAdvance = async () => {
+    if (isLocked) {
+      showLockedAlert(navigation);
+      return;
+    }
     if (!advAmount || isNaN(parseFloat(advAmount))) {
       Alert.alert('Invalid', 'Please enter a valid amount.');
       return;
@@ -151,9 +156,26 @@ export default function StaffDetailScreen({ route, navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={22} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Staff Details</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('EditStaff', { staffId })} style={styles.headerBtn}>
-          <Ionicons name="create-outline" size={22} color="#2563EB" />
+        <View style={styles.headerTitleRow}>
+          <Text style={styles.headerTitle}>Staff Details</Text>
+          {isLocked && (
+            <View style={styles.lockBadge}>
+              <Ionicons name="lock-closed" size={12} color="#fff" />
+              <Text style={styles.lockBadgeText}>Locked</Text>
+            </View>
+          )}
+        </View>
+        <TouchableOpacity 
+          onPress={() => {
+            if (isLocked) {
+              showLockedAlert(navigation);
+            } else {
+              navigation.navigate('EditStaff', { staffId });
+            }
+          }} 
+          style={styles.headerBtn}
+        >
+          <Ionicons name="create-outline" size={22} color={isLocked ? '#9CA3AF' : '#2563EB'} />
         </TouchableOpacity>
       </View>
 
@@ -450,7 +472,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F3F4F6' },
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   headerBtn: { padding: 8 },
+  headerTitleRow: { flexDirection: 'row', alignItems: 'center' },
   headerTitle: { fontSize: 18, fontWeight: '600', color: '#111827' },
+  lockBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#6B7280', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, marginLeft: 8 },
+  lockBadgeText: { fontSize: 10, fontWeight: '600', color: '#fff', marginLeft: 3 },
   profileCard: { backgroundColor: '#fff', margin: 16, borderRadius: 16, padding: 24, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   avatarLarge: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   avatarTextLarge: { fontSize: 28, fontWeight: '700', color: '#1D4ED8' },

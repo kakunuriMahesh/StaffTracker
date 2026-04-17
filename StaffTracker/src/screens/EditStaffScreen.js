@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
 import { getStaffById, updateStaff } from '../database/db';
 import { Calendar } from 'react-native-calendars';
+import { showLockedAlert } from '../utils/upgradeHelper';
 
 const DEFAULT_ROLES = ['Maid', 'Cook', 'Driver', 'Gardener', 'Security', 'Watchman', 'Other'];
 const DURATION_TYPES = [
@@ -188,6 +189,12 @@ export default function EditStaffScreen({ route, navigation }) {
 
   const save = async () => {
     if (saving) return;
+
+    const { isLocked } = route.params || {};
+    if (isLocked) {
+      showLockedAlert(navigation);
+      return;
+    }
     
     if (!validateForm()) {
       const errorList = Object.values(errors).filter(Boolean);

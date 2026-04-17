@@ -6,6 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
 import { getAllStaff, getAttendanceByDate } from '../database/db';
 import { syncData, addSyncListener, removeSyncListener } from '../services/syncManager';
+import { applyStaffLocking } from '../utils/staffAccessControl';
+import { addPlanChangeListener } from '../services/planService';
 
 const TODAY = dayjs().format('YYYY-MM-DD');
 const STATUS_COLOR = { P: '#D1FAE5', A: '#FEE2E2', L: '#FEF3C7' };
@@ -28,16 +30,36 @@ export default function HomeScreen({ navigation }) {
       }
     };
     addSyncListener(handleSyncEvent);
-    return () => removeSyncListener(handleSyncEvent);
+    
+    const handlePlanChange = () => {
+      console.log('[HomeScreen] Plan changed, reloading data');
+      loadData();
+    };
+    const removePlanListener = addPlanChangeListener(handlePlanChange);
+    
+    return () => {
+      removeSyncListener(handleSyncEvent);
+      removePlanListener();
+    };
   }, []);
 
   const loadData = async () => {
-    const list = await getAllStaff();
-    const records = await getAttendanceByDate(TODAY);
-    const map = {};
-    records.forEach(r => { map[r.staff_id] = r.status; });
-    setStaff(list);
-    setTodayMap(map);
+    try {
+      const list = await getAllStaff();
+      if (!list || !Array.isArray(list)) {
+        setStaff([]);
+        return;
+      }
+      const lockedList = await applyStaffLocking(list);
+      const records = await getAttendanceByDate(TODAY);
+      const map = {};
+      records.forEach(r => { map[r.staff_id] = r.status; });
+      setStaff(lockedList || []);
+      setTodayMap(map);
+    } catch (error) {
+      console.log('[HomeScreen] loadData error:', error);
+      setStaff([]);
+    }
   };
 
   useFocusEffect(
@@ -60,13 +82,22 @@ export default function HomeScreen({ navigation }) {
 
   const renderItem = ({ item }) => {
     const status = todayMap[item.id];
+    const isLocked = item.isLocked;
     return (
-      <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('StaffDetail', { staffId: item.id })}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{item.name[0].toUpperCase()}</Text>
+      <TouchableOpacity 
+        style={[styles.card, isLocked && styles.cardLocked]} 
+        onPress={() => navigation.navigate('StaffDetail', { staffId: item.id, isLocked })}
+      >
+        <View style={[styles.avatar, isLocked && styles.avatarLocked]}>
+          <Text style={[styles.avatarText, isLocked && styles.avatarTextLocked]}>{item.name[0].toUpperCase()}</Text>
         </View>
         <View style={styles.info}>
-          <Text style={styles.name}>{item.name}</Text>
+          <View style={styles.nameRow}>
+            <Text style={[styles.name, isLocked && styles.nameLocked]}>{item.name}</Text>
+            {isLocked && (
+              <Ionicons name="lock-closed" size={14} color="#9CA3AF" style={{ marginLeft: 4 }} />
+            )}
+          </View>
           <View style={styles.roleRow}>
             <Ionicons name={getRoleIcon(item.position)} size={12} color="#6B7280" />
             <Text style={styles.role}>{item.position}</Text>
@@ -144,10 +175,15 @@ const styles = StyleSheet.create({
   syncBtn: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   card:        { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 16, marginVertical: 6, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
+  cardLocked:  { opacity: 0.7, borderColor: '#D1D5DB' },
   avatar:      { width: 50, height: 50, borderRadius: 25, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center', marginRight: 14 },
+  avatarLocked: { backgroundColor: '#E5E7EB' },
   avatarText:  { fontSize: 20, fontWeight: '700', color: '#1D4ED8' },
+  avatarTextLocked: { color: '#9CA3AF' },
   info:        { flex: 1 },
   name:        { fontSize: 16, fontWeight: '600', color: '#111827', marginBottom: 4 },
+  nameLocked:  { color: '#6B7280' },
+  nameRow:     { flexDirection: 'row', alignItems: 'center' },
   roleRow:     { flexDirection: 'row', alignItems: 'center' },
   role:        { fontSize: 13, color: '#6B7280', marginLeft: 4 },
   separator:   { fontSize: 13, color: '#9CA3AF', marginHorizontal: 6 },

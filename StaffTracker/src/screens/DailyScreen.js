@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Modal, TextInput, Pressable, Alert, TouchableWithoutFeedback } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -6,6 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
 import { getAllStaff, getAttendanceByDate, markAttendance } from '../database/db';
 import { Calendar } from 'react-native-calendars';
+import { applyStaffLocking } from '../utils/staffAccessControl';
+import { showLockedAlert, addPlanChangeListener } from '../services/planService';
 
 const S_BG  = { P: '#D1FAE5', A: '#FEE2E2', L: '#FEF3C7' };
 const S_FG  = { P: '#065F46', A: '#991B1B', L: '#92400E' };
@@ -24,18 +26,37 @@ export default function DailyScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const insets = useSafeAreaInsets();
 
+  useEffect(() => {
+    const handlePlanChange = () => {
+      console.log('[DailyScreen] Plan changed, reloading data');
+      load();
+    };
+    const removePlanListener = addPlanChangeListener(handlePlanChange);
+    return () => removePlanListener();
+  }, []);
+
   const load = useCallback(async () => {
-    const list = await getAllStaff();
-    const records = await getAttendanceByDate(selectedDate);
-    const attMap = {};
-    const noteMap = {};
-    records.forEach(r => { 
-      attMap[r.staff_id] = r.status;
-      if (r.note) noteMap[r.staff_id] = r.note;
-    });
-    setStaff(list);
-    setAttendance(attMap);
-    setNotes(noteMap);
+    try {
+      const list = await getAllStaff();
+      if (!list || !Array.isArray(list)) {
+        setStaff([]);
+        return;
+      }
+      const lockedList = await applyStaffLocking(list);
+      const records = await getAttendanceByDate(selectedDate);
+      const attMap = {};
+      const noteMap = {};
+      records.forEach(r => { 
+        attMap[r.staff_id] = r.status;
+        if (r.note) noteMap[r.staff_id] = r.note;
+      });
+      setStaff(lockedList || []);
+      setAttendance(attMap);
+      setNotes(noteMap);
+    } catch (error) {
+      console.log('[DailyScreen] load error:', error);
+      setStaff([]);
+    }
   }, [selectedDate]);
 
   useFocusEffect(
@@ -45,6 +66,12 @@ export default function DailyScreen() {
   );
 
   const mark = async (staffId, status) => {
+    const staffMember = staff.find(s => s.id === staffId);
+    if (staffMember?.isLocked) {
+      showLockedAlert();
+      return;
+    }
+    
     if (marking[staffId]) return;
     
     setMarking(prev => ({ ...prev, [staffId]: true }));
@@ -116,13 +143,19 @@ export default function DailyScreen() {
   const renderItem = ({ item }) => {
     const cur = attendance[item.id];
     const hasNote = notes[item.id];
+    const isLocked = item.isLocked;
     return (
-      <View style={styles.row}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{item.name[0].toUpperCase()}</Text>
+      <View style={[styles.row, isLocked && styles.rowLocked]}>
+        <View style={[styles.avatar, isLocked && styles.avatarLocked]}>
+          <Text style={[styles.avatarText, isLocked && styles.avatarTextLocked]}>{item.name[0].toUpperCase()}</Text>
         </View>
         <View style={styles.nameCol}>
-          <Text style={styles.name}>{item.name}</Text>
+          <View style={styles.nameRow}>
+            <Text style={[styles.name, isLocked && styles.nameLocked]}>{item.name}</Text>
+            {isLocked && (
+              <Ionicons name="lock-closed" size={12} color="#9CA3AF" style={{ marginLeft: 4 }} />
+            )}
+          </View>
           <View style={styles.roleRow}>
             <Ionicons name={getRoleIcon(item.position)} size={12} color="#6B7280" />
             <Text style={styles.role}>{item.position}</Text>
@@ -134,9 +167,17 @@ export default function DailyScreen() {
             { key: 'A', icon: 'close-circle', label: 'Absent' },
             { key: 'L', icon: 'time-outline', label: 'Leave' },
           ].map(({ key, icon, label }) => (
-            <TouchableOpacity key={key} onPress={() => mark(item.id, key)}
-              style={[styles.btn, cur === key && { backgroundColor: S_BG[key], borderColor: S_BG[key] }]}
-              activeOpacity={0.7}>
+            <TouchableOpacity 
+              key={key} 
+              onPress={() => isLocked ? showLockedAlert() : mark(item.id, key)}
+              style={[
+                styles.btn, 
+                cur === key && { backgroundColor: S_BG[key], borderColor: S_BG[key] },
+                isLocked && styles.btnDisabled
+              ]}
+              disabled={isLocked}
+              activeOpacity={0.7}
+            >
               <Ionicons 
                 name={icon} 
                 size={20} 
@@ -145,8 +186,9 @@ export default function DailyScreen() {
             </TouchableOpacity>
           ))}
           <TouchableOpacity 
-            onPress={() => openNoteModal(item)}
-            style={[styles.noteBtn, hasNote && styles.noteBtnActive]}
+            onPress={() => isLocked ? showLockedAlert() : openNoteModal(item)}
+            style={[styles.noteBtn, hasNote && styles.noteBtnActive, isLocked && styles.btnDisabled]}
+            disabled={isLocked}
           >
             <Ionicons 
               name={hasNote ? 'document-text' : 'document-text-outline'} 
@@ -309,14 +351,20 @@ const styles = StyleSheet.create({
   summaryLbl:   { fontSize: 10, color: '#9CA3AF', marginTop: 2 },
   summaryDivider: { width: 1, backgroundColor: '#E5E7EB' },
   row:          { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginBottom: 10, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 4 },
+  rowLocked:    { opacity: 0.7 },
   avatar:       { width: 44, height: 44, borderRadius: 22, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  avatarLocked: { backgroundColor: '#E5E7EB' },
   avatarText:   { fontSize: 18, fontWeight: '700', color: '#1D4ED8' },
+  avatarTextLocked: { color: '#9CA3AF' },
   nameCol:      { flex: 1 },
   name:         { fontSize: 15, fontWeight: '600', color: '#111827' },
+  nameLocked:   { color: '#6B7280' },
+  nameRow:      { flexDirection: 'row', alignItems: 'center' },
   roleRow:      { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
   role:         { fontSize: 12, color: '#6B7280', marginLeft: 4 },
   btnGroup:     { flexDirection: 'row', gap: 8 },
   btn:          { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB' },
+  btnDisabled:  { opacity: 0.5 },
   noteBtn:      { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB' },
   noteBtnActive: { backgroundColor: '#EFF6FF', borderColor: '#2563EB' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
