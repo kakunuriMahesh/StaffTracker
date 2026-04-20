@@ -148,6 +148,21 @@ const ProfileScreen = ({ navigation }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Subscription</Text>
 
+          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('SyncSettings')}>
+            <View style={styles.menuItemLeft}>
+              <View style={[styles.menuIcon, { backgroundColor: '#DBEAFE' }]}>
+                <Icon name="sync" size={20} color="#2563EB" />
+              </View>
+              <View>
+                <Text style={styles.menuTitle}>Sync Settings</Text>
+                <Text style={styles.menuSubtitle}>
+                  Configure data backup
+                </Text>
+              </View>
+            </View>
+            <Icon name="chevron-forward" size={20} color="#9CA3AF" />
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Plans')}>
             <View style={styles.menuItemLeft}>
               <View

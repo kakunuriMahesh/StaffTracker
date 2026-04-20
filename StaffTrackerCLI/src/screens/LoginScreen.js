@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,14 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useApp } from '../context/AppContext';
+
+const WEB_CLIENT_ID = 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com';
 
 const LoginScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -22,6 +26,7 @@ const LoginScreen = ({ navigation }) => {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
+      Alert.alert('Error', 'Please enter email and password');
       return;
     }
 
@@ -31,14 +36,20 @@ const LoginScreen = ({ navigation }) => {
       navigation.replace('MainApp');
     } catch (error) {
       console.error('Login error:', error);
+      Alert.alert('Error', 'Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleGoogleSignIn = () => {
-    login({ name: 'Demo User', email: 'demo@example.com' });
-    navigation.replace('MainApp');
+  const handleGoogleSignIn = async () => {
+    Alert.alert(
+      'Google Sign-In',
+      'To enable Google Sign-In:\n\n1. Go to Google Cloud Console\n2. Create OAuth 2.0 credentials\n3. Replace WEB_CLIENT_ID in LoginScreen.js\n\nFor now, you can continue with email login.',
+      [
+        { text: 'OK' }
+      ]
+    );
   };
 
   const handleSkipLogin = () => {
@@ -86,7 +97,7 @@ const LoginScreen = ({ navigation }) => {
           </View>
 
           <TouchableOpacity
-            style={[styles.button, styles.loginButton]}
+            style={[styles.button, styles.loginButton, isLoading && styles.buttonDisabled]}
             onPress={handleLogin}
             disabled={isLoading}
           >
@@ -106,7 +117,6 @@ const LoginScreen = ({ navigation }) => {
           <TouchableOpacity
             style={[styles.button, styles.googleButton]}
             onPress={handleGoogleSignIn}
-            disabled={isLoading}
           >
             <Icon name="logo-google" size={20} color="#fff" style={styles.buttonIcon} />
             <Text style={styles.googleButtonText}>Sign in with Google</Text>
@@ -115,7 +125,6 @@ const LoginScreen = ({ navigation }) => {
           <TouchableOpacity
             style={[styles.button, styles.skipButton]}
             onPress={handleSkipLogin}
-            disabled={isLoading}
           >
             <Text style={styles.skipButtonText}>Continue without login</Text>
           </TouchableOpacity>
@@ -195,6 +204,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 12,
     marginBottom: 12,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
   loginButton: {
     backgroundColor: '#2563EB',

@@ -25,7 +25,7 @@ const STATUS_ICON = {
 const StaffDetailScreen = ({ route, navigation }) => {
   const { staffId } = route.params || {};
   const insets = useSafeAreaInsets();
-  const { staffList, deleteStaff, isStaffLocked, canEditStaff, getAttendance, markAttendance } = useApp();
+  const { staffList, deleteStaff, isStaffLocked, canEditStaff, getAttendance, getNote, getStaffNotes, markAttendance, notes } = useApp();
 
   const staff = staffList.find((s) => s.id === staffId);
   const isLocked = staff ? isStaffLocked(staff) : false;
@@ -39,14 +39,15 @@ const StaffDetailScreen = ({ route, navigation }) => {
 
   const currentStatus = staff ? getAttendance(staff.id, selectedDate) : null;
 
+  const staffNotes = staff ? getStaffNotes(staff.id) : {};
+
   useFocusEffect(
     useCallback(() => {
       if (staff) {
-        const key = `${staff.id}_${selectedDate}_note`;
-        const storedNote = staffList.find(s => s.id === staffId)?.notes?.[selectedDate];
+        const storedNote = getNote(staff.id, selectedDate);
         setAttendNote(storedNote || '');
       }
-    }, [selectedDate, staff])
+    }, [selectedDate, staff, notes])
   );
 
   const formatDate = (dateStr) => {
@@ -344,6 +345,21 @@ const StaffDetailScreen = ({ route, navigation }) => {
           </View>
         </View>
 
+        {Object.keys(staffNotes).length > 0 && (
+          <View style={styles.notesSection}>
+            <Text style={styles.sectionTitle}>Notes</Text>
+            {Object.entries(staffNotes).map(([date, note]) => (
+              <View key={date} style={styles.noteRow}>
+                <View style={styles.noteDate}>
+                  <Icon name="calendar-outline" size={14} color="#6B7280" />
+                  <Text style={styles.noteDateText}>{formatDate(date)}</Text>
+                </View>
+                <Text style={styles.noteText}>{note}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
         <View style={styles.infoCard}>
           <Text style={styles.sectionTitle}>Details</Text>
           <View style={styles.infoRow}>
@@ -539,6 +555,17 @@ const styles = StyleSheet.create({
   noteInput: {
     fontSize: 15, color: '#1E293B', paddingVertical: 12, minHeight: 100, textAlignVertical: 'top',
   },
+  notesSection: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
+  },
+  noteRow: {
+    flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
+  },
+  noteDate: {
+    flexDirection: 'row', alignItems: 'center', width: 100,
+  },
+  noteDateText: { fontSize: 12, color: '#6B7280', marginLeft: 4 },
+  noteText: { flex: 1, fontSize: 13, color: '#374151' },
 });
 
 export default StaffDetailScreen;

@@ -58,9 +58,7 @@ const EditStaffScreen = ({ route, navigation }) => {
       newErrors.name = 'Please enter staff name';
     }
 
-    if (!phone.trim()) {
-      newErrors.phone = 'Please enter phone number';
-    } else if (phone.length < 10) {
+    if (phone.trim() && phone.length < 10) {
       newErrors.phone = 'Phone number must be at least 10 digits';
     }
 

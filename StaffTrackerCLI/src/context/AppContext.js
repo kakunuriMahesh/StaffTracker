@@ -8,6 +8,7 @@ export const useApp = () => useContext(AppContext);
 export const AppProvider = ({ children }) => {
   const [staffList, setStaffList] = useState([]);
   const [attendance, setAttendance] = useState({});
+  const [notes, setNotes] = useState({});
   const [plan, setPlan] = useState({ type: 'Free', status: 'Active', expiryDate: null });
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -33,13 +34,15 @@ export const AppProvider = ({ children }) => {
 
   const loadData = async () => {
     setLoading(true);
-    const [staff, attend, planData] = await Promise.all([
+    const [staff, attend, planData, staffNotes] = await Promise.all([
       storageService.getStaffList(),
       storageService.getAttendance(),
       storageService.getPlan(),
+      storageService.getNotes(),
     ]);
     setStaffList(staff);
     setAttendance(attend);
+    setNotes(staffNotes || {});
     setPlan(planData);
     setLoading(false);
   };
@@ -83,16 +86,44 @@ export const AppProvider = ({ children }) => {
     await storageService.saveStaffList(updatedList);
   };
 
-  const markAttendance = async (staffId, date, status) => {
+  const markAttendance = async (staffId, date, status, note = null) => {
     const key = `${staffId}_${date}`;
     const updated = { ...attendance, [key]: status };
     setAttendance(updated);
     await storageService.saveAttendance(updated);
+    
+    if (note !== null) {
+      const noteKey = `${staffId}_${date}`;
+      const updatedNotes = { ...notes };
+      if (note && note.trim()) {
+        updatedNotes[noteKey] = note.trim();
+      } else {
+        delete updatedNotes[noteKey];
+      }
+      setNotes(updatedNotes);
+      await storageService.saveNotes(updatedNotes);
+    }
   };
 
   const getAttendance = (staffId, date) => {
     const key = `${staffId}_${date}`;
     return attendance[key] || null;
+  };
+
+  const getNote = (staffId, date) => {
+    const noteKey = `${staffId}_${date}`;
+    return notes[noteKey] || null;
+  };
+
+  const getStaffNotes = (staffId) => {
+    const staffNotes = {};
+    Object.keys(notes).forEach(key => {
+      if (key.startsWith(`${staffId}_`)) {
+        const date = key.substring(key.length - 10);
+        staffNotes[date] = notes[key];
+      }
+    });
+    return staffNotes;
   };
 
   const setPlanType = async (type) => {
@@ -140,6 +171,7 @@ export const AppProvider = ({ children }) => {
     user,
     staffList,
     attendance,
+    notes,
     plan,
     loading,
     isPlanActive,
@@ -153,6 +185,8 @@ export const AppProvider = ({ children }) => {
     deleteStaff,
     markAttendance,
     getAttendance,
+    getNote,
+    getStaffNotes,
     setPlanType,
     setPlanStatus,
     login,

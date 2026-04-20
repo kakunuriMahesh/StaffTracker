@@ -5,6 +5,7 @@ const KEYS = {
   ATTENDANCE: '@attendance_data',
   PLAN: '@plan_info',
   CUSTOM_ROLES: '@custom_roles',
+  NOTES: '@staff_notes',
 };
 
 export const storageService = {
@@ -89,6 +90,24 @@ export const storageService = {
       await AsyncStorage.setItem(KEYS.CUSTOM_ROLES, JSON.stringify(roles));
     } catch (error) {
       console.error('Error saving custom roles:', error);
+    }
+  },
+
+  async getNotes() {
+    try {
+      const data = await AsyncStorage.getItem(KEYS.NOTES);
+      return data ? JSON.parse(data) : {};
+    } catch (error) {
+      console.error('Error getting notes:', error);
+      return {};
+    }
+  },
+
+  async saveNotes(notes) {
+    try {
+      await AsyncStorage.setItem(KEYS.NOTES, JSON.stringify(notes));
+    } catch (error) {
+      console.error('Error saving notes:', error);
     }
   },
 };

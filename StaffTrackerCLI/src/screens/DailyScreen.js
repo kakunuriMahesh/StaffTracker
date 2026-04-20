@@ -29,6 +29,7 @@ const DailyScreen = ({ navigation }) => {
     isStaffLocked,
     markAttendance,
     getAttendance,
+    getNote,
     canMarkAttendance,
   } = useApp();
 
@@ -79,10 +80,15 @@ const DailyScreen = ({ navigation }) => {
 
   const handleMarkAttendance = (item) => {
     setSelectedStaffForNote(item);
+    setNoteText(getNote(item.id, selectedDate) || '');
     setShowNoteModal(true);
   };
 
   const handleSaveNote = async () => {
+    if (selectedStaffForNote) {
+      const currentStatus = getAttendance(selectedStaffForNote.id, selectedDate) || 'P';
+      await markAttendance(selectedStaffForNote.id, selectedDate, currentStatus, noteText);
+    }
     setShowNoteModal(false);
     setNoteText('');
     setSelectedStaffForNote(null);
@@ -90,6 +96,7 @@ const DailyScreen = ({ navigation }) => {
 
   const renderItem = ({ item }) => {
     const cur = getAttendance(item.id, selectedDate);
+    const hasNote = getNote(item.id, selectedDate);
     const isLocked = isStaffLocked(item);
     const canMark = canMarkAttendance(item);
 
@@ -140,6 +147,17 @@ const DailyScreen = ({ navigation }) => {
               <Icon name={icon} size={20} color={cur === key ? S_FG[key] : '#D1D5DB'} />
             </TouchableOpacity>
           ))}
+          <TouchableOpacity
+            onPress={() => handleMarkAttendance(item)}
+            style={[styles.noteBtn, hasNote && styles.noteBtnActive, isLocked && styles.btnDisabled]}
+            disabled={isLocked || !canMark}
+          >
+            <Icon 
+              name={hasNote ? 'document-text' : 'document-text-outline'} 
+              size={18} 
+              color={hasNote ? '#2563EB' : '#9CA3AF'} 
+            />
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -418,6 +436,20 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
   },
   btnDisabled: { opacity: 0.5 },
+  noteBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  noteBtnActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#2563EB',
+  },
   empty: {
     flex: 1,
     alignItems: 'center',

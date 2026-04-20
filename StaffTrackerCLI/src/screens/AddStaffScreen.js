@@ -19,8 +19,8 @@ const DEFAULT_ROLES = ['Maid', 'Cook', 'Driver', 'Gardener', 'Security', 'Watchm
 const DURATION_TYPES = [
   { key: 'daily', label: 'Daily' },
   { key: 'monthly', label: 'Monthly' },
+  { key: 'manual', label: 'Manual' },
 ];
-const QUICK_SELECT_AMOUNTS = [500, 1000, 2000, 5000];
 
 const AddStaffScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -34,7 +34,6 @@ const AddStaffScreen = ({ navigation }) => {
   const [phone, setPhone] = useState('');
   const [salary, setSalary] = useState('');
   const [salaryType, setSalaryType] = useState('monthly');
-  const [currentSalary, setCurrentSalary] = useState('');
   const [note, setNote] = useState('');
   const [errors, setErrors] = useState({});
 
@@ -61,12 +60,6 @@ const AddStaffScreen = ({ navigation }) => {
 
   const handleSalaryChange = (text) => {
     setSalary(text);
-    setCurrentSalary(text);
-  };
-
-  const handleSelectQuickAmount = (amount) => {
-    setSalary(String(amount));
-    setCurrentSalary(String(amount));
   };
 
   const handleAddNewRole = () => {
@@ -99,9 +92,7 @@ const AddStaffScreen = ({ navigation }) => {
       newErrors.name = 'Please enter staff name';
     }
 
-    if (!phone.trim()) {
-      newErrors.phone = 'Please enter phone number';
-    } else if (phone.length < 10) {
+    if (phone.trim() && phone.length < 10) {
       newErrors.phone = 'Phone number must be at least 10 digits';
     }
 
@@ -347,27 +338,6 @@ const AddStaffScreen = ({ navigation }) => {
               {salaryType === 'daily' ? 'per day' : 'per month'}
             </Text>
           )}
-          <View style={styles.quickSelectRow}>
-            {QUICK_SELECT_AMOUNTS.map((amount) => (
-              <TouchableOpacity
-                key={amount}
-                style={[
-                  styles.quickSelectBtn,
-                  parseFloat(salary) === amount && styles.quickSelectBtnActive,
-                ]}
-                onPress={() => handleSelectQuickAmount(amount)}
-              >
-                <Text
-                  style={[
-                    styles.quickSelectText,
-                    parseFloat(salary) === amount && styles.quickSelectTextActive,
-                  ]}
-                >
-                  ₹{amount}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
         </View>
 
         <View style={[styles.inputGroup, styles.cardStyle]}>
@@ -524,19 +494,6 @@ const styles = StyleSheet.create({
   currencySymbol: { fontSize: 16, fontWeight: '600', color: '#059669', marginLeft: 8, marginRight: 2 },
   salaryInput: { paddingLeft: 0 },
   salaryHint: { fontSize: 13, color: '#059669', marginTop: 10, fontWeight: '500' },
-  quickSelectRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  quickSelectBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
-  },
-  quickSelectBtnActive: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
-  quickSelectText: { fontSize: 14, fontWeight: '600', color: '#64748B' },
-  quickSelectTextActive: { color: '#fff' },
   noteWrapper: {
     flexDirection: 'row',
     backgroundColor: '#F8FAFC',
