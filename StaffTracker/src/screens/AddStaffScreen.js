@@ -15,7 +15,6 @@ const DURATION_TYPES = [
   { key: 'monthly', label: 'Monthly' },
   { key: 'manual', label: 'Manual' },
 ];
-const QUICK_SELECT_AMOUNTS = [100, 500, 1000];
 
 export default function AddStaffScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -135,9 +134,7 @@ export default function AddStaffScreen({ navigation }) {
       newErrors.name = 'Please enter staff name';
     }
     
-    if (!phone.trim()) {
-      newErrors.phone = 'Please enter phone number';
-    } else if (phone.length < 10) {
+    if (phone.trim() && phone.length < 10) {
       newErrors.phone = 'Phone number must be at least 10 digits';
     }
     
@@ -466,21 +463,7 @@ export default function AddStaffScreen({ navigation }) {
               ₹{parseFloat(salary || 0).toLocaleString('en-IN')} {salaryType === 'daily' ? 'per day' : 'per month'}
             </Text>
           )}
-          {salaryType !== 'manual' && (
-            <View style={styles.quickSelectRow}>
-              {QUICK_SELECT_AMOUNTS.map(amount => (
-                <TouchableOpacity
-                  key={amount}
-                  style={[styles.quickSelectBtn, parseFloat(salary) === amount && styles.quickSelectBtnActive]}
-                  onPress={() => setSalary(String(amount))}
-                >
-                  <Text style={[styles.quickSelectText, parseFloat(salary) === amount && styles.quickSelectTextActive]}>
-                    ₹{amount}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
+          
         </View>
 
         <View style={[styles.inputGroup, styles.cardStyle]}>
@@ -631,19 +614,6 @@ const styles = StyleSheet.create({
   currencySymbol: { fontSize: 16, fontWeight: '600', color: '#059669', marginLeft: 8, marginRight: 2 },
   salaryInput: { paddingLeft: 0 },
   salaryHint: { fontSize: 13, color: '#059669', marginTop: 10, fontWeight: '500' },
-  quickSelectRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  quickSelectBtn: { 
-    flex: 1, 
-    paddingVertical: 10, 
-    borderRadius: 8, 
-    borderWidth: 1.5, 
-    borderColor: '#E2E8F0', 
-    backgroundColor: '#F8FAFC', 
-    alignItems: 'center',
-  },
-  quickSelectBtnActive: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
-  quickSelectText: { fontSize: 14, fontWeight: '600', color: '#64748B' },
-  quickSelectTextActive: { color: '#fff' },
   saveBtn: { 
     flexDirection: 'row', 
     alignItems: 'center', 
