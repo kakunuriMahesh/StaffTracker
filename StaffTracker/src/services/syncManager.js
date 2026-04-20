@@ -200,24 +200,36 @@ export const manualSync = async (onSyncChoice) => {
           console.log('[ManualSync] User chose Restore (replace)');
           await importToDB(remoteData, 'replace', googleId);
           
-          try {
-            await saveToLocalCache(remoteData, googleId);
-          } catch (cacheError) {
-            console.log('[ManualSync] Cache update skipped:', cacheError.message);
-          }
+          console.log('[ManualSync] Restore complete, now re-uploading to Drive...');
           
-          console.log('[ManualSync] Restore complete');
+          accessToken = await getFreshToken();
+          if (accessToken) {
+            const restoredData = await exportFromDB(googleId);
+            try {
+              await saveToLocalCache(restoredData, googleId);
+            } catch (cacheError) {
+              console.log('[ManualSync] Cache update skipped:', cacheError.message);
+            }
+            await uploadJSON(accessToken, restoredData, googleId);
+            console.log('[ManualSync] Restored data uploaded to Drive');
+          }
         } else if (choice === 'merge') {
           console.log('[ManualSync] User chose Merge');
           await importToDB(remoteData, 'merge', googleId);
           
-          try {
-            await saveToLocalCache(remoteData, googleId);
-          } catch (cacheError) {
-            console.log('[ManualSync] Cache update skipped:', cacheError.message);
-          }
+          console.log('[ManualSync] Merge complete, now re-uploading to Drive...');
           
-          console.log('[ManualSync] Merge complete');
+          accessToken = await getFreshToken();
+          if (accessToken) {
+            const mergedData = await exportFromDB(googleId);
+            try {
+              await saveToLocalCache(mergedData, googleId);
+            } catch (cacheError) {
+              console.log('[ManualSync] Cache update skipped:', cacheError.message);
+            }
+            await uploadJSON(accessToken, mergedData, googleId);
+            console.log('[ManualSync] Merged data uploaded to Drive');
+          }
         }
       }
     } else {
