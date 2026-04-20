@@ -148,7 +148,7 @@ const ProfileScreen = ({ navigation }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Subscription</Text>
 
-          <TouchableOpacity style={styles.menuItem} onPress={() => {}}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Plans')}>
             <View style={styles.menuItemLeft}>
               <View
                 style={[

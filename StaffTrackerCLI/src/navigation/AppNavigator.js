@@ -12,6 +12,7 @@ import ProfileScreen from '../screens/ProfileScreen';
 import AddStaffScreen from '../screens/AddStaffScreen';
 import EditStaffScreen from '../screens/EditStaffScreen';
 import StaffDetailScreen from '../screens/StaffDetailScreen';
+import PlansScreen from '../screens/PlansScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -81,6 +82,7 @@ function MainStack() {
       <Stack.Screen name="AddStaff" component={AddStaffScreen} />
       <Stack.Screen name="EditStaff" component={EditStaffScreen} />
       <Stack.Screen name="StaffDetail" component={StaffDetailScreen} />
+      <Stack.Screen name="Plans" component={PlansScreen} />
     </Stack.Navigator>
   );
 }

@@ -2,10 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
+  TextInput,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
   Alert,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -29,10 +31,22 @@ const StaffDetailScreen = ({ route, navigation }) => {
   const isLocked = staff ? isStaffLocked(staff) : false;
   const canEdit = staff ? canEditStaff(staff) : false;
 
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [attendNote, setAttendNote] = useState('');
+
+  const currentStatus = staff ? getAttendance(staff.id, selectedDate) : null;
+
   useFocusEffect(
     useCallback(() => {
-      // Refresh on focus
-    }, [])
+      if (staff) {
+        const key = `${staff.id}_${selectedDate}_note`;
+        const storedNote = staffList.find(s => s.id === staffId)?.notes?.[selectedDate];
+        setAttendNote(storedNote || '');
+      }
+    }, [selectedDate, staff])
   );
 
   const formatDate = (dateStr) => {
@@ -43,6 +57,17 @@ const StaffDetailScreen = ({ route, navigation }) => {
       month: 'short',
       year: 'numeric',
     });
+  };
+
+  const handleMarkAttendance = async (status) => {
+    if (!canEdit || isLocked) return;
+    await markAttendance(staff.id, selectedDate, status);
+    setShowNoteModal(true);
+  };
+
+  const handleSaveNote = async () => {
+    setShowNoteModal(false);
+    setNoteText('');
   };
 
   const handleDelete = () => {
@@ -65,31 +90,132 @@ const StaffDetailScreen = ({ route, navigation }) => {
 
   const getRoleIcon = (role) => {
     switch (role) {
-      case 'Maid':
-        return 'home-outline';
-      case 'Cook':
-        return 'restaurant-outline';
-      case 'Driver':
-        return 'car-outline';
-      case 'Gardener':
-        return 'leaf-outline';
-      case 'Security':
-        return 'shield-checkmark-outline';
-      case 'Watchman':
-        return 'eye-outline';
-      default:
-        return 'person-outline';
+      case 'Maid': return 'home-outline';
+      case 'Cook': return 'restaurant-outline';
+      case 'Driver': return 'car-outline';
+      case 'Gardener': return 'leaf-outline';
+      case 'Security': return 'shield-checkmark-outline';
+      case 'Watchman': return 'eye-outline';
+      default: return 'person-outline';
     }
+  };
+
+  const renderDatePicker = () => {
+    const today = new Date();
+    const dates = [];
+    for (let i = 30; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(today.getDate() - i);
+      dates.push(d.toISOString().split('T')[0]);
+    }
+
+    return (
+      <Modal visible={showDatePicker} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.datePickerModal}>
+            <View style={styles.datePickerHeader}>
+              <Text style={styles.datePickerTitle}>Select Date</Text>
+              <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                <Icon name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.dateList}>
+              {dates.map((date) => (
+                <TouchableOpacity
+                  key={date}
+                  style={[
+                    styles.dateItem,
+                    selectedDate === date && styles.dateItemSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedDate(date);
+                    setShowDatePicker(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.dateItemText,
+                      selectedDate === date && styles.dateItemTextSelected,
+                    ]}
+                  >
+                    {formatDate(date)}
+                  </Text>
+                  {selectedDate === date && (
+                    <Icon name="checkmark" size={18} color="#2563EB" />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  const renderNoteModal = () => (
+    <Modal visible={showNoteModal} transparent animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View style={styles.noteModal}>
+          <View style={styles.noteModalHeader}>
+            <Text style={styles.noteModalTitle}>Add Note (Optional)</Text>
+            <TouchableOpacity onPress={handleSaveNote}>
+              <Icon name="checkmark" size={24} color="#2563EB" />
+            </TouchableOpacity>
+          </View>
+          <TextInput
+            style={styles.noteInput}
+            placeholder="Add a note for this attendance..."
+            placeholderTextColor="#9CA3AF"
+            value={noteText}
+            onChangeText={setNoteText}
+            multiline
+            numberOfLines={3}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const generateCalendarDays = () => {
+    const days = [];
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+    for (let i = 0; i < firstDay; i++) {
+      days.push(<View key={`empty-${i}`} style={styles.calendarDay} />);
+    }
+
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+      const status = staff ? getAttendance(staff.id, dateStr) : null;
+      days.push(
+        <View
+          key={i}
+          style={[
+            styles.calendarDay,
+            status && { backgroundColor: STATUS_BG[status] },
+          ]}
+        >
+          <Text style={[styles.calendarDayText, status && { color: STATUS_FG[status] }]}>
+            {i}
+          </Text>
+          {status && (
+            <Icon name={STATUS_ICON[status]} size={10} color={STATUS_FG[status]} />
+          )}
+        </View>
+      );
+    }
+    return days;
   };
 
   if (!staff) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.backBtn}
-          >
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Icon name="arrow-back" size={22} color="#111827" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Staff Details</Text>
@@ -105,10 +231,7 @@ const StaffDetailScreen = ({ route, navigation }) => {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backBtn}
-        >
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Icon name="arrow-back" size={22} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Staff Details</Text>
@@ -139,16 +262,90 @@ const StaffDetailScreen = ({ route, navigation }) => {
           </View>
           <Text style={styles.staffName}>{staff.name}</Text>
           <View style={styles.roleRow}>
-            <Icon
-              name={getRoleIcon(staff.position)}
-              size={16}
-              color="#6B7280"
-            />
+            <Icon name={getRoleIcon(staff.position)} size={16} color="#6B7280" />
             <Text style={styles.roleText}>{staff.position || 'Staff'}</Text>
+          </View>
+          {staff.note && (
+            <View style={styles.noteContainer}>
+              <Icon name="document-text-outline" size={14} color="#6B7280" />
+              <Text style={styles.staffNote}>{staff.note}</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.infoCard}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <TouchableOpacity
+            style={styles.dateSelectBtn}
+            onPress={() => setShowDatePicker(true)}
+          >
+            <Icon name="calendar" size={20} color="#2563EB" />
+            <Text style={styles.dateSelectText}>{formatDate(selectedDate)}</Text>
+            <Icon name="chevron-down" size={20} color="#2563EB" />
+          </TouchableOpacity>
+
+          <View style={styles.attendanceBtns}>
+            {[
+              { key: 'P', label: 'Present', icon: 'checkmark-circle', color: STATUS_BG.P, text: STATUS_FG.P },
+              { key: 'A', label: 'Absent', icon: 'close-circle', color: STATUS_BG.A, text: STATUS_FG.A },
+              { key: 'L', label: 'Leave', icon: 'time-outline', color: STATUS_BG.L, text: STATUS_FG.L },
+              { key: null, label: 'Clear', icon: 'remove-circle-outline', color: '#F3F4F6', text: '#6B7280' },
+            ].map(({ key, label, icon, color, text }) => (
+              <TouchableOpacity
+                key={label}
+                style={[
+                  styles.attendanceBtn,
+                  currentStatus === key && styles.attendanceBtnActive,
+                  { backgroundColor: currentStatus === key ? color : '#F9FAFB' },
+                  isLocked && styles.attendanceBtnDisabled,
+                ]}
+                onPress={() => handleMarkAttendance(key)}
+                disabled={isLocked || !canEdit}
+              >
+                <Icon name={icon} size={24} color={currentStatus === key ? text : '#D1D5DB'} />
+                <Text style={[styles.attendanceBtnText, currentStatus === key && { color: text }]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {attendNote ? (
+            <View style={styles.attendNoteContainer}>
+              <Icon name="document-text-outline" size={16} color="#6B7280" />
+              <Text style={styles.attendNoteText}>{attendNote}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.calendarCard}>
+          <Text style={styles.sectionTitle}>This Month</Text>
+          <View style={styles.calendarHeader}>
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+              <Text key={day} style={styles.calendarHeaderText}>{day}</Text>
+            ))}
+          </View>
+          <View style={styles.calendarGrid}>
+            {generateCalendarDays()}
+          </View>
+          <View style={styles.calendarLegend}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: STATUS_BG.P }]} />
+              <Text style={styles.legendText}>Present</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: STATUS_BG.A }]} />
+              <Text style={styles.legendText}>Absent</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: STATUS_BG.L }]} />
+              <Text style={styles.legendText}>Leave</Text>
+            </View>
           </View>
         </View>
 
         <View style={styles.infoCard}>
+          <Text style={styles.sectionTitle}>Details</Text>
           <View style={styles.infoRow}>
             <View style={styles.infoIcon}>
               <Icon name="call" size={20} color="#2563EB" />
@@ -158,23 +355,17 @@ const StaffDetailScreen = ({ route, navigation }) => {
               <Text style={styles.infoValue}>{staff.phone || '-'}</Text>
             </View>
           </View>
-
           <View style={styles.divider} />
-
           <View style={styles.infoRow}>
             <View style={styles.infoIcon}>
               <Icon name="calendar" size={20} color="#2563EB" />
             </View>
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Joined</Text>
-              <Text style={styles.infoValue}>
-                {formatDate(staff.joinedDate)}
-              </Text>
+              <Text style={styles.infoValue}>{formatDate(staff.joinedDate)}</Text>
             </View>
           </View>
-
           <View style={styles.divider} />
-
           <View style={styles.infoRow}>
             <View style={styles.infoIcon}>
               <Icon name="wallet" size={20} color="#2563EB" />
@@ -182,54 +373,8 @@ const StaffDetailScreen = ({ route, navigation }) => {
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Salary</Text>
               <Text style={styles.infoValue}>
-                ₹{staff.salary || 0} /{' '}
-                {staff.salary_type === 'daily' ? 'day' : 'month'}
+                ₹{staff.salary || 0} / {staff.salary_type === 'daily' ? 'day' : 'month'}
               </Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.statsCard}>
-          <Text style={styles.statsTitle}>This Month</Text>
-          <View style={styles.statsGrid}>
-            <View style={styles.statItem}>
-              <View
-                style={[styles.statBox, { backgroundColor: STATUS_BG.P }]}
-              >
-                <Icon
-                  name={STATUS_ICON.P}
-                  size={20}
-                  color={STATUS_FG.P}
-                />
-              </View>
-              <Text style={styles.statNumber}>0</Text>
-              <Text style={styles.statLabel}>Present</Text>
-            </View>
-            <View style={styles.statItem}>
-              <View
-                style={[styles.statBox, { backgroundColor: STATUS_BG.A }]}
-              >
-                <Icon
-                  name={STATUS_ICON.A}
-                  size={20}
-                  color={STATUS_FG.A}
-                />
-              </View>
-              <Text style={styles.statNumber}>0</Text>
-              <Text style={styles.statLabel}>Absent</Text>
-            </View>
-            <View style={styles.statItem}>
-              <View
-                style={[styles.statBox, { backgroundColor: STATUS_BG.L }]}
-              >
-                <Icon
-                  name={STATUS_ICON.L}
-                  size={20}
-                  color={STATUS_FG.L}
-                />
-              </View>
-              <Text style={styles.statNumber}>0</Text>
-              <Text style={styles.statLabel}>Leave</Text>
             </View>
           </View>
         </View>
@@ -243,6 +388,9 @@ const StaffDetailScreen = ({ route, navigation }) => {
           <Text style={styles.deleteBtnText}>Delete Staff</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {renderDatePicker()}
+      {renderNoteModal()}
     </View>
   );
 };
@@ -263,11 +411,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
   editBtn: { padding: 8 },
   content: { padding: 16, paddingBottom: 40 },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText: { fontSize: 16, color: '#6B7280' },
   profileCard: {
     backgroundColor: '#fff',
@@ -276,93 +420,125 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  avatarContainer: {
-    position: 'relative',
-    marginBottom: 16,
-  },
+  avatarContainer: { position: 'relative', marginBottom: 16 },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#DBEAFE',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center',
   },
   avatarLocked: { backgroundColor: '#E5E7EB' },
   avatarText: { fontSize: 32, fontWeight: '700', color: '#1D4ED8' },
   avatarTextLocked: { color: '#9CA3AF' },
   lockedBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#6B7280',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    position: 'absolute', bottom: 0, right: 0,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#6B7280', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
   },
   lockedBadgeText: { color: '#fff', fontSize: 10, fontWeight: '600', marginLeft: 4 },
   staffName: { fontSize: 22, fontWeight: '700', color: '#0F172A', marginBottom: 8 },
-  roleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+  roleRow: { flexDirection: 'row', alignItems: 'center' },
   roleText: { fontSize: 14, color: '#6B7280', marginLeft: 6 },
-  infoCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+  noteContainer: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F8FAFC', paddingHorizontal: 12, paddingVertical: 8,
+    borderRadius: 8, marginTop: 12,
   },
+  staffNote: { fontSize: 13, color: '#6B7280', marginLeft: 6 },
+  infoCard: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
+  },
+  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#0F172A', marginBottom: 16 },
+  dateSelectBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#EFF6FF', paddingHorizontal: 16, paddingVertical: 12,
+    borderRadius: 12, marginBottom: 16,
+  },
+  dateSelectText: { fontSize: 15, color: '#2563EB', fontWeight: '500' },
+  attendanceBtns: {
+    flexDirection: 'row', justifyContent: 'space-between', gap: 8,
+  },
+  attendanceBtn: {
+    flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 12,
+    backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E2E8F0',
+  },
+  attendanceBtnActive: { borderColor: '#2563EB' },
+  attendanceBtnDisabled: { opacity: 0.5 },
+  attendanceBtnText: { fontSize: 12, fontWeight: '500', color: '#6B7280', marginTop: 4 },
+  attendNoteContainer: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F8FAFC', paddingHorizontal: 12, paddingVertical: 8,
+    borderRadius: 8, marginTop: 12,
+  },
+  attendNoteText: { fontSize: 13, color: '#6B7280', marginLeft: 6 },
+  calendarCard: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
+  },
+  calendarHeader: {
+    flexDirection: 'row', justifyContent: 'space-around', marginBottom: 8,
+  },
+  calendarHeaderText: { fontSize: 11, fontWeight: '600', color: '#9CA3AF' },
+  calendarGrid: {
+    flexDirection: 'row', flexWrap: 'wrap',
+  },
+  calendarDay: {
+    width: `${100 / 7}%`, aspectRatio: 1,
+    alignItems: 'center', justifyContent: 'center',
+    borderRadius: 8, marginBottom: 4,
+  },
+  calendarDayText: { fontSize: 12, color: '#374151' },
+  calendarLegend: {
+    flexDirection: 'row', justifyContent: 'center', gap: 16, marginTop: 16,
+  },
+  legendItem: { flexDirection: 'row', alignItems: 'center' },
+  legendDot: { width: 10, height: 10, borderRadius: 5, marginRight: 4 },
+  legendText: { fontSize: 12, color: '#6B7280' },
   infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 8,
   },
   infoIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 40, height: 40, borderRadius: 10,
+    backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center',
     marginRight: 12,
   },
   infoContent: { flex: 1 },
   infoLabel: { fontSize: 12, color: '#64748B', marginBottom: 2 },
   infoValue: { fontSize: 16, fontWeight: '600', color: '#0F172A' },
   divider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 8 },
-  statsCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-  },
-  statsTitle: { fontSize: 16, fontWeight: '600', color: '#0F172A', marginBottom: 16 },
-  statsGrid: { flexDirection: 'row', justifyContent: 'space-around' },
-  statItem: { alignItems: 'center' },
-  statBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  statNumber: { fontSize: 20, fontWeight: '700', color: '#0F172A' },
-  statLabel: { fontSize: 12, color: '#64748B' },
   deleteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FEE2E2',
-    padding: 16,
-    borderRadius: 12,
-    marginTop: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#FEE2E2', padding: 16, borderRadius: 12, marginTop: 12,
   },
   deleteBtnDisabled: { opacity: 0.5 },
   deleteBtnText: { color: '#DC2626', fontSize: 16, fontWeight: '600', marginLeft: 8 },
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20,
+  },
+  datePickerModal: {
+    backgroundColor: '#fff', borderRadius: 20, width: '100%', maxHeight: '70%', overflow: 'hidden',
+  },
+  datePickerHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 16, borderBottomWidth: 1, borderBottomColor: '#E2E8F0',
+  },
+  datePickerTitle: { fontSize: 18, fontWeight: '600', color: '#0F172A' },
+  dateList: { maxHeight: 300 },
+  dateItem: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
+  },
+  dateItemSelected: { backgroundColor: '#EFF6FF' },
+  dateItemText: { fontSize: 15, color: '#374151' },
+  dateItemTextSelected: { color: '#2563EB', fontWeight: '600' },
+  noteModal: {
+    backgroundColor: '#fff', borderRadius: 20, width: '100%', padding: 16,
+  },
+  noteModalHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#E2E8F0',
+  },
+  noteModalTitle: { fontSize: 18, fontWeight: '600', color: '#0F172A' },
+  noteInput: {
+    fontSize: 15, color: '#1E293B', paddingVertical: 12, minHeight: 100, textAlignVertical: 'top',
+  },
 });
 
 export default StaffDetailScreen;

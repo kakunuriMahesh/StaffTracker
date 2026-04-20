@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,32 +7,89 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useApp } from '../context/AppContext';
+import { storageService } from '../services/storageService';
 
 const DEFAULT_ROLES = ['Maid', 'Cook', 'Driver', 'Gardener', 'Security', 'Watchman', 'Other'];
 const DURATION_TYPES = [
   { key: 'daily', label: 'Daily' },
   { key: 'monthly', label: 'Monthly' },
 ];
+const QUICK_SELECT_AMOUNTS = [500, 1000, 2000, 5000];
 
 const AddStaffScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const { addStaff, isPremium, canEditStaff, getMaxStaffCount, staffList } = useApp();
+  const { addStaff, isPremium, getMaxStaffCount, staffList } = useApp();
 
   const [name, setName] = useState('');
   const [position, setPosition] = useState('Maid');
+  const [customRole, setCustomRole] = useState('');
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+  const [availableRoles, setAvailableRoles] = useState([...DEFAULT_ROLES]);
   const [phone, setPhone] = useState('');
   const [salary, setSalary] = useState('');
   const [salaryType, setSalaryType] = useState('monthly');
-  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+  const [currentSalary, setCurrentSalary] = useState('');
+  const [note, setNote] = useState('');
   const [errors, setErrors] = useState({});
+
+  useEffect(() => {
+    loadCustomRoles();
+  }, []);
+
+  const loadCustomRoles = async () => {
+    try {
+      const savedRoles = await storageService.getCustomRoles();
+      if (savedRoles && savedRoles.length > 0) {
+        const customRolesList = savedRoles.filter(r => !DEFAULT_ROLES.includes(r));
+        setAvailableRoles([...DEFAULT_ROLES, ...customRolesList]);
+      }
+    } catch (error) {
+      console.log('Error loading custom roles:', error);
+    }
+  };
 
   const handlePhoneChange = (text) => {
     const numericValue = text.replace(/[^0-9]/g, '');
     setPhone(numericValue);
+  };
+
+  const handleSalaryChange = (text) => {
+    setSalary(text);
+    setCurrentSalary(text);
+  };
+
+  const handleSelectQuickAmount = (amount) => {
+    setSalary(String(amount));
+    setCurrentSalary(String(amount));
+  };
+
+  const handleAddNewRole = () => {
+    if (!customRole.trim()) {
+      Alert.alert('Error', 'Please enter a role name');
+      return;
+    }
+    const newRole = customRole.trim();
+    if (availableRoles.some(r => r.toLowerCase() === newRole.toLowerCase())) {
+      Alert.alert('Error', 'This role already exists');
+      return;
+    }
+    const updatedRoles = [...availableRoles, newRole];
+    setAvailableRoles(updatedRoles);
+    setPosition(newRole);
+    setCustomRole('');
+    setShowRoleDropdown(false);
+    storageService.saveCustomRoles(updatedRoles.filter(r => !DEFAULT_ROLES.includes(r)));
+  };
+
+  const handleRoleSelect = (role) => {
+    setPosition(role);
+    setShowRoleDropdown(false);
   };
 
   const validateForm = () => {
@@ -82,6 +139,7 @@ const AddStaffScreen = ({ navigation }) => {
         phone: phone.trim(),
         salary: parseFloat(salary),
         salary_type: salaryType,
+        note: note.trim(),
         joinedDate: new Date().toISOString(),
       });
       navigation.goBack();
@@ -153,31 +211,48 @@ const AddStaffScreen = ({ navigation }) => {
           </TouchableOpacity>
           {showRoleDropdown && (
             <View style={styles.dropdownContainer}>
-              {DEFAULT_ROLES.map((role) => (
+              <TextInput
+                style={styles.customRoleInput}
+                placeholder="Type to add new role..."
+                placeholderTextColor="#9CA3AF"
+                value={customRole}
+                onChangeText={setCustomRole}
+              />
+              {customRole.trim() && (
                 <TouchableOpacity
-                  key={role}
-                  style={[
-                    styles.dropdownItem,
-                    position === role && styles.dropdownItemActive,
-                  ]}
-                  onPress={() => {
-                    setPosition(role);
-                    setShowRoleDropdown(false);
-                  }}
+                  style={styles.addRoleBtn}
+                  onPress={handleAddNewRole}
                 >
-                  <Text
-                    style={[
-                      styles.dropdownItemText,
-                      position === role && styles.dropdownItemTextActive,
-                    ]}
-                  >
-                    {role}
-                  </Text>
-                  {position === role && (
-                    <Icon name="checkmark" size={18} color="#2563EB" />
-                  )}
+                  <Icon name="add-circle-outline" size={20} color="#2563EB" />
+                  <Text style={styles.addRoleText}>Add "{customRole.trim()}"</Text>
                 </TouchableOpacity>
-              ))}
+              )}
+              <FlatList
+                data={availableRoles}
+                keyExtractor={(item) => item}
+                style={styles.roleList}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.dropdownItem,
+                      position === item && styles.dropdownItemActive,
+                    ]}
+                    onPress={() => handleRoleSelect(item)}
+                  >
+                    <Text
+                      style={[
+                        styles.dropdownItemText,
+                        position === item && styles.dropdownItemTextActive,
+                      ]}
+                    >
+                      {item}
+                    </Text>
+                    {position === item && (
+                      <Icon name="checkmark" size={18} color="#2563EB" />
+                    )}
+                  </TouchableOpacity>
+                )}
+              />
             </View>
           )}
         </View>
@@ -257,10 +332,7 @@ const AddStaffScreen = ({ navigation }) => {
             <TextInput
               style={[styles.input, styles.salaryInput]}
               value={salary}
-              onChangeText={(text) => {
-                setSalary(text);
-                setErrors((prev) => ({ ...prev, salary: null }));
-              }}
+              onChangeText={handleSalaryChange}
               keyboardType="numeric"
               placeholder="0.00"
               placeholderTextColor="#9CA3AF"
@@ -275,6 +347,49 @@ const AddStaffScreen = ({ navigation }) => {
               {salaryType === 'daily' ? 'per day' : 'per month'}
             </Text>
           )}
+          <View style={styles.quickSelectRow}>
+            {QUICK_SELECT_AMOUNTS.map((amount) => (
+              <TouchableOpacity
+                key={amount}
+                style={[
+                  styles.quickSelectBtn,
+                  parseFloat(salary) === amount && styles.quickSelectBtnActive,
+                ]}
+                onPress={() => handleSelectQuickAmount(amount)}
+              >
+                <Text
+                  style={[
+                    styles.quickSelectText,
+                    parseFloat(salary) === amount && styles.quickSelectTextActive,
+                  ]}
+                >
+                  ₹{amount}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={[styles.inputGroup, styles.cardStyle]}>
+          <Text style={styles.label}>Note (Optional)</Text>
+          <View style={styles.noteWrapper}>
+            <Icon
+              name="document-text"
+              size={20}
+              color="#6B7280"
+              style={[styles.inputIcon, { alignSelf: 'flex-start', marginTop: 14 }]}
+            />
+            <TextInput
+              style={[styles.input, styles.noteInput]}
+              value={note}
+              onChangeText={setNote}
+              placeholder="Add any note for this staff..."
+              placeholderTextColor="#9CA3AF"
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+          </View>
         </View>
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
@@ -354,8 +469,28 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    overflow: 'hidden',
+    maxHeight: 300,
   },
+  customRoleInput: {
+    fontSize: 15,
+    color: '#1E293B',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+  },
+  addRoleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    backgroundColor: '#EFF6FF',
+  },
+  addRoleText: { fontSize: 14, color: '#2563EB', marginLeft: 8, fontWeight: '500' },
+  roleList: { maxHeight: 180 },
   dropdownItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -389,6 +524,31 @@ const styles = StyleSheet.create({
   currencySymbol: { fontSize: 16, fontWeight: '600', color: '#059669', marginLeft: 8, marginRight: 2 },
   salaryInput: { paddingLeft: 0 },
   salaryHint: { fontSize: 13, color: '#059669', marginTop: 10, fontWeight: '500' },
+  quickSelectRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  quickSelectBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+  },
+  quickSelectBtnActive: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
+  quickSelectText: { fontSize: 14, fontWeight: '600', color: '#64748B' },
+  quickSelectTextActive: { color: '#fff' },
+  noteWrapper: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    minHeight: 100,
+  },
+  noteInput: {
+    paddingTop: 12,
+    minHeight: 100,
+  },
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -4,6 +4,7 @@ const KEYS = {
   STAFF: '@staff_list',
   ATTENDANCE: '@attendance_data',
   PLAN: '@plan_info',
+  CUSTOM_ROLES: '@custom_roles',
 };
 
 export const storageService = {
@@ -70,6 +71,24 @@ export const storageService = {
       await AsyncStorage.multiRemove([KEYS.STAFF, KEYS.ATTENDANCE, KEYS.PLAN]);
     } catch (error) {
       console.error('Error clearing storage:', error);
+    }
+  },
+
+  async getCustomRoles() {
+    try {
+      const data = await AsyncStorage.getItem(KEYS.CUSTOM_ROLES);
+      return data ? JSON.parse(data) : [];
+    } catch (error) {
+      console.error('Error getting custom roles:', error);
+      return [];
+    }
+  },
+
+  async saveCustomRoles(roles) {
+    try {
+      await AsyncStorage.setItem(KEYS.CUSTOM_ROLES, JSON.stringify(roles));
+    } catch (error) {
+      console.error('Error saving custom roles:', error);
     }
   },
 };

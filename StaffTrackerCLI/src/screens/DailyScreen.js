@@ -5,6 +5,9 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
+  Modal,
+  ScrollView,
+  TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -24,18 +27,32 @@ const DailyScreen = ({ navigation }) => {
   const {
     staffList,
     isStaffLocked,
-    isPlanActive,
-    isPremium,
     markAttendance,
     getAttendance,
     canMarkAttendance,
   } = useApp();
 
-  const [selectedDate, setSelectedDate] = useState(
-    new Date().toISOString().split('T')[0]
-  );
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [selectedStaffForNote, setSelectedStaffForNote] = useState(null);
 
-  const activeStaff = staffList.filter((s) => s.isActive && !isStaffLocked(s));
+  const handlePrevMonth = () => {
+    const prev = new Date(currentMonth);
+    prev.setMonth(prev.getMonth() - 1);
+    setCurrentMonth(prev);
+  };
+
+  const handleNextMonth = () => {
+    const next = new Date(currentMonth);
+    next.setMonth(next.getMonth() + 1);
+    const now = new Date();
+    if (next <= now) {
+      setCurrentMonth(next);
+    }
+  };
 
   const present = staffList.filter(
     (s) => getAttendance(s.id, selectedDate) === 'P'
@@ -50,21 +67,25 @@ const DailyScreen = ({ navigation }) => {
 
   const getRoleIcon = (role) => {
     switch (role) {
-      case 'Maid':
-        return 'home-outline';
-      case 'Cook':
-        return 'restaurant-outline';
-      case 'Driver':
-        return 'car-outline';
-      case 'Gardener':
-        return 'leaf-outline';
-      case 'Security':
-        return 'shield-checkmark-outline';
-      case 'Watchman':
-        return 'eye-outline';
-      default:
-        return 'person-outline';
+      case 'Maid': return 'home-outline';
+      case 'Cook': return 'restaurant-outline';
+      case 'Driver': return 'car-outline';
+      case 'Gardener': return 'leaf-outline';
+      case 'Security': return 'shield-checkmark-outline';
+      case 'Watchman': return 'eye-outline';
+      default: return 'person-outline';
     }
+  };
+
+  const handleMarkAttendance = (item) => {
+    setSelectedStaffForNote(item);
+    setShowNoteModal(true);
+  };
+
+  const handleSaveNote = async () => {
+    setShowNoteModal(false);
+    setNoteText('');
+    setSelectedStaffForNote(null);
   };
 
   const renderItem = ({ item }) => {
@@ -85,20 +106,11 @@ const DailyScreen = ({ navigation }) => {
               {item.name}
             </Text>
             {isLocked && (
-              <Icon
-                name="lock-closed"
-                size={12}
-                color="#9CA3AF"
-                style={{ marginLeft: 4 }}
-              />
+              <Icon name="lock-closed" size={12} color="#9CA3AF" style={{ marginLeft: 4 }} />
             )}
           </View>
           <View style={styles.roleRow}>
-            <Icon
-              name={getRoleIcon(item.position)}
-              size={12}
-              color="#6B7280"
-            />
+            <Icon name={getRoleIcon(item.position)} size={12} color="#6B7280" />
             <Text style={styles.role}>{item.position || 'Staff'}</Text>
           </View>
         </View>
@@ -107,10 +119,13 @@ const DailyScreen = ({ navigation }) => {
             { key: 'P', icon: 'checkmark-circle', label: 'Present' },
             { key: 'A', icon: 'close-circle', label: 'Absent' },
             { key: 'L', icon: 'time-outline', label: 'Leave' },
-          ].map(({ key, icon, label }) => (
+          ].map(({ key, icon }) => (
             <TouchableOpacity
               key={key}
-              onPress={() => canMark && markAttendance(item.id, selectedDate, key)}
+              onPress={() => {
+                markAttendance(item.id, selectedDate, key);
+                handleMarkAttendance(item);
+              }}
               style={[
                 styles.btn,
                 cur === key && {
@@ -122,11 +137,7 @@ const DailyScreen = ({ navigation }) => {
               disabled={isLocked || !canMark}
               activeOpacity={0.7}
             >
-              <Icon
-                name={icon}
-                size={20}
-                color={cur === key ? S_FG[key] : '#D1D5DB'}
-              />
+              <Icon name={icon} size={20} color={cur === key ? S_FG[key] : '#D1D5DB'} />
             </TouchableOpacity>
           ))}
         </View>
@@ -143,12 +154,102 @@ const DailyScreen = ({ navigation }) => {
     });
   };
 
+  const renderDatePicker = () => {
+    const displayMonth = currentMonth.getMonth();
+    const displayYear = currentMonth.getFullYear();
+    const firstDay = new Date(displayYear, displayMonth, 1).getDay();
+    const daysInMonth = new Date(displayYear, displayMonth + 1, 0).getDate();
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+
+    const days = [];
+    for (let i = 0; i < firstDay; i++) {
+      days.push(<View key={`empty-${i}`} style={styles.calendarEmptyDay} />);
+    }
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dateStr = `${displayYear}-${String(displayMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+      const isSelected = selectedDate === dateStr;
+      const status = staffList.length > 0 ? staffList[0]?.attendance?.[dateStr] : null;
+      days.push(
+        <TouchableOpacity
+          key={i}
+          style={[
+            styles.calendarDay,
+            isSelected && styles.calendarDaySelected,
+            status && { backgroundColor: status === 'P' ? '#D1FAE5' : status === 'A' ? '#FEE2E2' : '#FEF3C7' },
+          ]}
+          onPress={() => {
+            setSelectedDate(dateStr);
+            setShowDatePicker(false);
+          }}
+        >
+          <Text style={[styles.calendarDayText, isSelected && styles.calendarDayTextSelected]}>
+            {i}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return (
+      <Modal visible={showDatePicker} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.datePickerModal}>
+            <View style={styles.datePickerHeader}>
+              <TouchableOpacity onPress={handlePrevMonth} style={styles.navBtn}>
+                <Icon name="chevron-back" size={24} color="#2563EB" />
+              </TouchableOpacity>
+              <Text style={styles.datePickerTitle}>{monthNames[displayMonth]} {displayYear}</Text>
+              <TouchableOpacity onPress={handleNextMonth} style={styles.navBtn}>
+                <Icon name="chevron-forward" size={24} color="#2563EB" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.calendarHeader}>
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                <Text key={day} style={styles.calendarHeaderText}>{day}</Text>
+              ))}
+            </View>
+            <View style={styles.calendarGrid}>
+              {days}
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  const renderNoteModal = () => (
+    <Modal visible={showNoteModal} transparent animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View style={styles.noteModal}>
+          <View style={styles.noteModalHeader}>
+            <Text style={styles.noteModalTitle}>Add Note (Optional)</Text>
+            <TouchableOpacity onPress={handleSaveNote}>
+              <Icon name="checkmark" size={24} color="#2563EB" />
+            </TouchableOpacity>
+          </View>
+          <TextInput
+            style={styles.noteInput}
+            placeholder="Add a note for this attendance..."
+            placeholderTextColor="#9CA3AF"
+            value={noteText}
+            onChangeText={setNoteText}
+            multiline
+            numberOfLines={3}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={styles.title}>Attendance</Text>
-          <TouchableOpacity style={styles.dateButton}>
+          <TouchableOpacity 
+            style={styles.dateButton}
+            onPress={() => setShowDatePicker(true)}
+          >
             <Icon name="calendar-outline" size={14} color="#2563EB" />
             <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
             <Icon name="chevron-down" size={14} color="#2563EB" />
@@ -210,6 +311,9 @@ const DailyScreen = ({ navigation }) => {
           renderItem={renderItem}
         />
       )}
+
+      {renderDatePicker()}
+      {renderNoteModal()}
     </View>
   );
 };
@@ -331,6 +435,100 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 18, fontWeight: '600', color: '#374151', marginBottom: 8 },
   emptyText: { fontSize: 14, color: '#9CA3AF', textAlign: 'center' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  datePickerModal: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    width: '100%',
+    maxHeight: '70%',
+    overflow: 'hidden',
+  },
+  datePickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  datePickerTitle: { fontSize: 18, fontWeight: '600', color: '#0F172A' },
+  dateList: { maxHeight: 300 },
+  dateItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  dateItemSelected: { backgroundColor: '#EFF6FF' },
+  dateItemText: { fontSize: 15, color: '#374151' },
+  dateItemTextSelected: { color: '#2563EB', fontWeight: '600' },
+  noteModal: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    width: '100%',
+    padding: 16,
+  },
+  noteModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  noteModalTitle: { fontSize: 18, fontWeight: '600', color: '#0F172A' },
+  noteInput: {
+    fontSize: 15,
+    color: '#1E293B',
+    paddingVertical: 12,
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 12,
+  },
+  calendarHeaderText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9CA3AF',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarEmptyDay: {
+    width: `${100 / 7}%`,
+    aspectRatio: 1,
+  },
+  calendarDay: {
+    width: `${100 / 7}%`,
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarDaySelected: {
+    backgroundColor: '#2563EB',
+    borderRadius: 20,
+  },
+  calendarDayText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  calendarDayTextSelected: {
+    color: '#fff',
+    fontWeight: '600',
+  },
 });
 
 export default DailyScreen;
