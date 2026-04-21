@@ -9,10 +9,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
 import dayjs from 'dayjs';
 import {
-  getStaffById, deleteStaff, archiveStaff, unarchiveStaff,
+  getStaffById, deleteStaff, archiveStaff, unarchiveStaff, confirmArchive,
   getAttendanceByStaffAndMonth, getMonthlyAdvances,
   addAdvance, deleteAdvance, updateAdvance
 } from '../database/db';
+import { showToast } from '../components/Toast';
 import { calculateSalary } from '../utils/salary';
 import { syncData } from '../services/syncManager';
 import { showLockedAlert } from '../utils/upgradeHelper';
@@ -242,43 +243,67 @@ export default function StaffDetailScreen({ route, navigation }) {
             </View>
           )}
 
-          <TouchableOpacity 
-            style={styles.archiveBtn} 
-            onPress={() => {
-              Alert.alert(
-                staff.is_archived ? 'Unarchive Staff' : 'Archive Staff',
-                staff.is_archived 
-                  ? `Restore ${staff.name} from archive? They will appear in the staff list again.`
-                  : `Archive ${staff.name}? Their attendance and advance records will be deleted, and they won't count towards your staff limit.`,
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { 
-                    text: staff.is_archived ? 'Restore' : 'Archive', 
-                    style: staff.is_archived ? 'default' : 'destructive',
-                    onPress: async () => {
-                      if (staff.is_archived) {
-                        await unarchiveStaff(staffId);
-                      } else {
-                        await archiveStaff(staffId);
-                      }
-                      await syncData();
-                      navigation.goBack();
-                    }
-                  },
-                ]
-              );
-            }}
-          >
-            <Ionicons name={staff.is_archived ? 'arrow-up-circle-outline' : 'archive-outline'} size={18} color={staff.is_archived ? '#2563EB' : '#6B7280'} />
-            <Text style={[styles.archiveBtnText, staff.is_archived && styles.archiveBtnTextRestore]}>
-              {staff.is_archived ? 'Restore from Archive' : 'Archive Staff'}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.actionRow}>
+            <TouchableOpacity 
+              style={styles.deleteBtn} 
+              onPress={handleDelete}
+            >
+              <Ionicons name="trash-outline" size={18} color="#DC2626" />
+              <Text style={styles.deleteBtnText}>Delete</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-            <Ionicons name="trash-outline" size={18} color="#DC2626" />
-            <Text style={styles.deleteBtnText}>Delete Staff</Text>
-          </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.archiveBtn, staff.is_archived && styles.archiveBtnRestore]} 
+              onPress={async () => {
+                if (staff.is_archived) {
+                  Alert.alert(
+                    'Restore Staff',
+                    `Restore ${staff.name} from archive?`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { 
+                        text: 'Restore', 
+                        onPress: async () => {
+                          await unarchiveStaff(staffId);
+                          navigation.goBack();
+                        }
+                      },
+                    ]
+                  );
+                } else {
+                  Alert.alert(
+                    'Archive Staff',
+                    `Archive ${staff.name}? Their attendance records will be deleted.`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { 
+                        text: 'Archive', 
+                        style: 'destructive',
+                        onPress: async () => {
+                          await archiveStaff(staffId, true);
+                          showToast(
+                            `${staff.name} archived`,
+                            async () => {
+                              await unarchiveStaff(staffId);
+                            }
+                          );
+                          setTimeout(() => {
+                            confirmArchive(staffId);
+                          }, 3000);
+                          navigation.goBack();
+                        }
+                      },
+                    ]
+                  );
+                }
+              }}
+            >
+              <Ionicons name={staff.is_archived ? 'arrow-up-circle-outline' : 'archive-outline'} size={18} color={staff.is_archived ? '#2563EB' : '#6B7280'} />
+              <Text style={[styles.archiveBtnText, staff.is_archived && styles.archiveBtnTextRestore]}>
+                {staff.is_archived ? 'Restore' : 'Archive'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {summary && (
@@ -530,9 +555,9 @@ const styles = StyleSheet.create({
   infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   infoIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   infoText: { fontSize: 13, color: '#374151', flex: 1 },
-  deleteBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: '#FEE2E2', backgroundColor: '#FEF2F2' },
-  deleteBtnText: { fontSize: 13, fontWeight: '500', color: '#DC2626', marginLeft: 6 },
-  archiveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', marginBottom: 10 },
+  deleteBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: '#FEE2E2', backgroundColor: '#FEF2F2' },
+  deleteBtnText: { fontSize: 13, fontWeight: '500', color: '#DC2626' },
+  archiveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB' },
   archiveBtnText: { fontSize: 13, fontWeight: '500', color: '#6B7280', marginLeft: 6 },
   archiveBtnTextRestore: { color: '#2563EB' },
   section: { backgroundColor: '#fff', margin: 16, marginTop: 0, borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 },
@@ -593,4 +618,7 @@ const styles = StyleSheet.create({
   noteDateRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   noteDate: { fontSize: 12, color: '#6B7280', marginLeft: 6 },
   noteText: { fontSize: 14, color: '#374151', lineHeight: 20 },
+  actionRow: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 8, width: '100%' },
+  archiveBtnRestore: { borderColor: '#DBEAFE', backgroundColor: '#EFF6FF' },
+  archiveBtnTextRestore: { color: '#2563EB' },
 });

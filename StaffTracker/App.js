@@ -24,6 +24,7 @@ import LoginScreen      from './src/screens/LoginScreen';
 import SyncSettingsScreen from './src/screens/SyncSettingsScreen';
 import UpgradeScreen    from './src/screens/UpgradeScreen';
 import ArchiveScreen   from './src/screens/ArchiveScreen';
+import Toast from './src/components/Toast';
 
 const Tab   = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -172,6 +173,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
+      <Toast />
       <NavigationContainer linking={deepLinking}>
         <Stack.Navigator 
           initialRouteName={initialRoute}

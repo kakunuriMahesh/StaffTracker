@@ -8,6 +8,7 @@ import { getAllStaff, getAttendanceByDate } from '../database/db';
 import { syncData, addSyncListener, removeSyncListener } from '../services/syncManager';
 import { applyStaffLocking } from '../utils/staffAccessControl';
 import { addPlanChangeListener } from '../services/planService';
+import { addStaffReloadListener } from '../services/staffReload';
 
 const TODAY = dayjs().format('YYYY-MM-DD');
 const STATUS_COLOR = { P: '#D1FAE5', A: '#FEE2E2', L: '#FEF3C7' };
@@ -37,9 +38,14 @@ export default function HomeScreen({ navigation }) {
     };
     const removePlanListener = addPlanChangeListener(handlePlanChange);
     
+    const removeReloadListener = addStaffReloadListener(() => {
+      loadData();
+    });
+    
     return () => {
       removeSyncListener(handleSyncEvent);
       removePlanListener();
+      removeReloadListener();
     };
   }, []);
 

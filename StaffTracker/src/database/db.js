@@ -170,14 +170,66 @@ export async function deleteStaff(id) {
   }
 }
 
-export async function archiveStaff(id) {
+export async function archiveStaff(id, skipSave = false) {
   await ensureLoaded();
   
   const index = staffCache.findIndex(s => s.id === id && !s.is_deleted);
   if (index !== -1) {
+    const staff = { ...staffCache[index] };
     const now = new Date().toISOString();
     staffCache[index].is_archived = 1;
     staffCache[index].archived_at = now;
+    
+    if (!skipSave) {
+      attendanceCache = attendanceCache.map(a => {
+        if (a.staff_id === id && !a.is_deleted) {
+          return { ...a, is_deleted: 1, deleted_at: now };
+        }
+        return a;
+      });
+      advancesCache = advancesCache.map(a => {
+        if (a.staff_id === id && !a.is_deleted) {
+          return { ...a, is_deleted: 1, deleted_at: now };
+        }
+        return a;
+      });
+    }
+    
+    if (skipSave) {
+      staffCache[index]._pendingSave = true;
+    } else {
+      await saveStaff(staffCache);
+      await saveAttendance(attendanceCache);
+      await saveAdvances(advancesCache);
+    }
+    console.log('[DB] Staff archived:', id, skipSave ? '(skipSave)' : '');
+    return { staff, id };
+  }
+  return null;
+}
+
+export async function unarchiveStaff(id) {
+  await ensureLoaded();
+  
+  const index = staffCache.findIndex(s => s.id === id && !s.is_deleted);
+  if (index !== -1) {
+    staffCache[index].is_archived = 0;
+    staffCache[index].archived_at = null;
+    delete staffCache[index]._pendingSave;
+    
+    await saveStaff(staffCache);
+    console.log('[DB] Staff unarchived:', id);
+  }
+}
+
+export async function confirmArchive(id) {
+  await ensureLoaded();
+  
+  const index = staffCache.findIndex(s => s.id === id && s.is_archived && !s.is_deleted);
+  if (index !== -1) {
+    const now = new Date().toISOString();
+    delete staffCache[index]._pendingSave;
+    await saveStaff(staffCache);
     
     attendanceCache = attendanceCache.map(a => {
       if (a.staff_id === id && !a.is_deleted) {
@@ -192,24 +244,9 @@ export async function archiveStaff(id) {
       return a;
     });
     
-    await saveStaff(staffCache);
     await saveAttendance(attendanceCache);
     await saveAdvances(advancesCache);
-    console.log('[DB] Staff archived:', id);
-  }
-}
-
-export async function unarchiveStaff(id) {
-  await ensureLoaded();
-  
-  const index = staffCache.findIndex(s => s.id === id && !s.is_deleted);
-  if (index !== -1) {
-    const now = new Date().toISOString();
-    staffCache[index].is_archived = 0;
-    staffCache[index].archived_at = null;
-    
-    await saveStaff(staffCache);
-    console.log('[DB] Staff unarchived:', id);
+    console.log('[DB] Archive confirmed, deleted attendance:', id);
   }
 }
 
