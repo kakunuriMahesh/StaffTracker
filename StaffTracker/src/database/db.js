@@ -22,6 +22,8 @@ export async function initDatabase() {
     staffCache = (rawStaff || []).map(s => ({
       ...s,
       is_deleted: s.is_deleted || 0,
+      is_archived: s.is_archived || 0,
+      archived_at: s.archived_at || null,
       deleted_at: s.deleted_at || null
     }));
     attendanceCache = (rawAttendance || []).map(a => ({
@@ -87,17 +89,31 @@ export async function addStaff(name, position, salary, phone, joinDate, salaryTy
   return newId;
 }
 
-export async function getAllStaff() {
+export async function getAllStaff(includeArchived = false) {
   await ensureLoaded();
-  const activeStaff = staffCache.filter(s => !s.is_deleted);
-  console.log('[DB] getAllStaff:', activeStaff.length, 'active records');
+  let activeStaff = staffCache.filter(s => !s.is_deleted);
+  if (includeArchived) {
+    activeStaff = staffCache.filter(s => !s.is_deleted || s.is_archived);
+  } else {
+    activeStaff = staffCache.filter(s => !s.is_deleted && !s.is_archived);
+  }
+  console.log('[DB] getAllStaff:', activeStaff.length, 'active records', includeArchived ? '(with archived)' : '');
   return activeStaff;
+}
+
+export async function getArchivedStaff() {
+  await ensureLoaded();
+  const archivedStaff = staffCache.filter(s => s.is_archived && !s.is_deleted);
+  console.log('[DB] getArchivedStaff:', archivedStaff.length, 'archived records');
+  return archivedStaff;
 }
 
 export async function getStaffById(id) {
   await ensureLoaded();
   const staff = staffCache.find(s => s.id === id && !s.is_deleted);
-  return staff || null;
+  if (staff) return staff;
+  const archivedStaff = staffCache.find(s => s.id === id && s.is_archived && !s.is_deleted);
+  return archivedStaff || null;
 }
 
 export async function updateStaff(id, name, position, salary, phone, salaryType, salaryStartDate, salaryEndDate, sundayHoliday, note) {
@@ -151,6 +167,49 @@ export async function deleteStaff(id) {
     await saveAttendance(attendanceCache);
     await saveAdvances(advancesCache);
     console.log('[DB] Staff soft deleted:', id);
+  }
+}
+
+export async function archiveStaff(id) {
+  await ensureLoaded();
+  
+  const index = staffCache.findIndex(s => s.id === id && !s.is_deleted);
+  if (index !== -1) {
+    const now = new Date().toISOString();
+    staffCache[index].is_archived = 1;
+    staffCache[index].archived_at = now;
+    
+    attendanceCache = attendanceCache.map(a => {
+      if (a.staff_id === id && !a.is_deleted) {
+        return { ...a, is_deleted: 1, deleted_at: now };
+      }
+      return a;
+    });
+    advancesCache = advancesCache.map(a => {
+      if (a.staff_id === id && !a.is_deleted) {
+        return { ...a, is_deleted: 1, deleted_at: now };
+      }
+      return a;
+    });
+    
+    await saveStaff(staffCache);
+    await saveAttendance(attendanceCache);
+    await saveAdvances(advancesCache);
+    console.log('[DB] Staff archived:', id);
+  }
+}
+
+export async function unarchiveStaff(id) {
+  await ensureLoaded();
+  
+  const index = staffCache.findIndex(s => s.id === id && !s.is_deleted);
+  if (index !== -1) {
+    const now = new Date().toISOString();
+    staffCache[index].is_archived = 0;
+    staffCache[index].archived_at = null;
+    
+    await saveStaff(staffCache);
+    console.log('[DB] Staff unarchived:', id);
   }
 }
 
@@ -333,11 +392,13 @@ export const exportToJSON = async (googleId = null) => {
   console.log('[DB] Attendance cache count:', attendanceCache.length);
   console.log('[DB] Advances cache count:', advancesCache.length);
   
-  const activeStaff = staffCache.filter(s => !s.is_deleted);
+  const activeStaff = staffCache.filter(s => !s.is_deleted && !s.is_archived);
+  const archivedStaff = staffCache.filter(s => !s.is_deleted && s.is_archived);
   const activeAttendance = attendanceCache.filter(a => !a.is_deleted);
   const activeAdvances = advancesCache.filter(a => !a.is_deleted);
   
   console.log('[DB] Active staff count:', activeStaff.length);
+  console.log('[DB] Archived staff count:', archivedStaff.length);
   console.log('[DB] Active attendance count:', activeAttendance.length);
   console.log('[DB] Active advances count:', activeAdvances.length);
   
@@ -376,6 +437,23 @@ export const exportToJSON = async (googleId = null) => {
       position: s.position,
       phone: s.phone,
       deletedAt: s.deleted_at
+    })),
+    archivedStaff: archivedStaff.map(s => ({
+      id: s.id,
+      googleId: googleId,
+      name: s.name,
+      position: s.position,
+      salary: s.salary,
+      salaryType: s.salary_type,
+      salaryStartDate: s.salary_start_date,
+      salaryEndDate: s.salary_end_date,
+      phone: s.phone,
+      joinDate: s.join_date,
+      sundayHoliday: !!s.sunday_holiday,
+      note: s.note || '',
+      isArchived: true,
+      archivedAt: s.archived_at,
+      updatedAt: s.updated_at
     })),
     attendance: activeAttendance.map(a => ({
       id: a.id,
@@ -421,6 +499,7 @@ export const exportToJSON = async (googleId = null) => {
       lastModified: new Date().toISOString(),
       appVersion: '1.0.0',
       staffCount: activeStaff.length,
+      archivedStaffCount: archivedStaff.length,
       deletedStaffCount: staffCache.filter(s => s.is_deleted).length,
       attendanceCount: activeAttendance.length,
       deletedAttendanceCount: attendanceCache.filter(a => a.is_deleted).length,
@@ -473,6 +552,28 @@ export const importFromJSON = async (jsonString, mergeMode = 'replace', targetGo
         updated_at: now
       }));
       staffCache = [...staffCache, ...deletedStaff];
+    }
+    
+    if (data.archivedStaff) {
+      const archived = data.archivedStaff.map(s => ({
+        id: s.id,
+        name: s.name,
+        position: s.position,
+        salary: s.salary,
+        salary_type: s.salaryType || 'monthly',
+        salary_start_date: s.salaryStartDate,
+        salary_end_date: s.salaryEndDate,
+        phone: s.phone,
+        join_date: s.joinDate,
+        sunday_holiday: s.sundayHoliday ? 1 : 0,
+        note: s.note || '',
+        is_deleted: 0,
+        is_archived: 1,
+        archived_at: s.archivedAt || now,
+        deleted_at: null,
+        updated_at: s.updatedAt || now
+      }));
+      staffCache = [...staffCache, ...archived];
     }
     
     if (data.attendance) {
@@ -608,6 +709,37 @@ export const importFromJSON = async (jsonString, mergeMode = 'replace', targetGo
           staffCache[existingIndex].is_deleted = 1;
           staffCache[existingIndex].deleted_at = deletedStaff.deletedAt || now;
           console.log('[DB] Merge: Marked staff as deleted:', deletedStaff.name);
+        }
+      }
+    }
+    
+    if (data.archivedStaff && data.archivedStaff.length > 0) {
+      for (const archived of data.archivedStaff) {
+        const existingIndex = staffCache.findIndex(s => s.id === archived.id);
+        if (existingIndex >= 0) {
+          staffCache[existingIndex].is_archived = 1;
+          staffCache[existingIndex].archived_at = archived.archivedAt || now;
+          console.log('[DB] Merge: Marked staff as archived:', archived.name);
+        } else {
+          staffCache.push({
+            id: archived.id,
+            name: archived.name,
+            position: archived.position,
+            salary: archived.salary,
+            salary_type: archived.salaryType || 'monthly',
+            salary_start_date: archived.salaryStartDate,
+            salary_end_date: archived.salaryEndDate,
+            phone: archived.phone,
+            join_date: archived.joinDate,
+            sunday_holiday: archived.sundayHoliday ? 1 : 0,
+            note: archived.note || '',
+            is_deleted: 0,
+            is_archived: 1,
+            archived_at: archived.archivedAt || now,
+            deleted_at: null,
+            updated_at: archived.updatedAt || now
+          });
+          console.log('[DB] Merge: Added archived staff:', archived.name);
         }
       }
     }

@@ -129,6 +129,12 @@ export default function HomeScreen({ navigation }) {
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity 
+            style={styles.archiveBtn} 
+            onPress={() => navigation.navigate('Archive')}
+          >
+            <Ionicons name="archive-outline" size={20} color="#6B7280" />
+          </TouchableOpacity>
+          <TouchableOpacity 
             style={styles.syncBtn} 
             onPress={() => navigation.navigate('SyncSettings')}
           >
@@ -173,6 +179,7 @@ const styles = StyleSheet.create({
   addBtn:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2563EB', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, shadowColor: '#2563EB', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 3 },
   addBtnText:  { color: '#fff', fontWeight: '600', fontSize: 14, marginLeft: 4 },
   syncBtn: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
+  archiveBtn: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   card:        { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 16, marginVertical: 6, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   cardLocked:  { opacity: 0.7, borderColor: '#D1D5DB' },

@@ -86,20 +86,25 @@ export function getUnlockMessage() {
 }
 
 export async function checkPlanAndGetStaff(staffList) {
+  const activeStaff = staffList.filter(s => !s.is_archived);
   const { limit, isUnlimited } = await getStaffLimit();
   
   if (isUnlimited) {
     return staffList.map(s => ({ ...s, isLocked: false }));
   }
   
-  const sorted = [...staffList].sort((a, b) => {
+  const sorted = [...activeStaff].sort((a, b) => {
     const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
     const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
     return dateA - dateB;
   });
   
-  return sorted.map((staff, index) => ({
+  const activeWithLock = sorted.map((staff, index) => ({
     ...staff,
     isLocked: index >= limit,
   }));
+  
+  const archived = staffList.filter(s => s.is_archived);
+  
+  return [...activeWithLock, ...archived];
 }

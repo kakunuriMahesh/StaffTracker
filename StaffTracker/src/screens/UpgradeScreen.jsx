@@ -20,7 +20,7 @@ const PLANS = [
     name: 'Monthly',
     price: 99,
     duration: '/month',
-    features: ['Unlimited staff', 'All premium features', 'Priority support', 'No ads'],
+    features: ['Up to 50 staff members', 'All premium features', 'Priority support', 'No ads'],
     popular: true,
   },
   {
@@ -138,9 +138,9 @@ export default function UpgradeScreen({ navigation }) {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.heroSection}>
           <Text style={styles.heroTitle}>🚀</Text>
-          <Text style={styles.heroSubtitle}>Unlock Unlimited Staff</Text>
+          <Text style={styles.heroSubtitle}>Unlock More Staff</Text>
           <Text style={styles.heroDesc}>
-            Upgrade to add unlimited staff members and access all premium features
+            Upgrade your plan to add more staff members and access all premium features
           </Text>
         </View>
 

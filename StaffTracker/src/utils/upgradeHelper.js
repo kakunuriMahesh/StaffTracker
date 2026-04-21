@@ -1,15 +1,17 @@
 import { Alert } from 'react-native';
-import { STAFF_LIMIT_FREE, setUserPlan } from '../services/planService';
+import { STAFF_LIMIT_FREE, setUserPlan, getStaffLimit } from '../services/planService';
 
 export async function resetToFreePlan() {
   await setUserPlan('free', null);
   console.log('[UpgradeHelper] Reset to free plan');
 }
 
-export function showUpgradeAlert(navigation) {
+export async function showUpgradeAlert(navigation) {
+  const { limit, userPlan } = await getStaffLimit();
+  const planName = userPlan === 'free' ? 'Free' : userPlan === 'monthly' ? 'Monthly' : 'Premium';
   Alert.alert(
     'Staff Limit Reached',
-    `Free plan allows only ${STAFF_LIMIT_FREE} staff members. Upgrade to add more.`,
+    `${planName} plan allows only ${limit} staff members. Upgrade to add more.`,
     [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -24,10 +26,12 @@ export function showUpgradeAlert(navigation) {
   );
 }
 
-export function showPlanLimitAlert(currentCount, navigation) {
+export async function showPlanLimitAlert(currentCount, navigation) {
+  const { limit, userPlan } = await getStaffLimit();
+  const planName = userPlan === 'free' ? 'Free' : userPlan === 'monthly' ? 'Monthly' : 'Premium';
   Alert.alert(
     'Staff Limit Reached',
-    `Your current plan only allows ${STAFF_LIMIT_FREE} staff members. You have ${currentCount}/${STAFF_LIMIT_FREE} staff.`,
+    `Your current ${planName} plan only allows ${limit} staff members. You have ${currentCount}/${limit} staff.`,
     [
       { text: 'Cancel', style: 'cancel' },
       {

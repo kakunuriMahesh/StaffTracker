@@ -23,6 +23,7 @@ import ProfileScreen     from './src/screens/ProfileScreen';
 import LoginScreen      from './src/screens/LoginScreen';
 import SyncSettingsScreen from './src/screens/SyncSettingsScreen';
 import UpgradeScreen    from './src/screens/UpgradeScreen';
+import ArchiveScreen   from './src/screens/ArchiveScreen';
 
 const Tab   = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -84,6 +85,7 @@ function MainAppStack() {
       <Stack.Screen name="StaffDetail" component={StaffDetailScreen} options={{ headerShown: false }} />
       <Stack.Screen name="SyncSettings" component={SyncSettingsScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Upgrade" component={UpgradeScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Archive" component={ArchiveScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

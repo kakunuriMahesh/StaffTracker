@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
 import dayjs from 'dayjs';
 import {
-  getStaffById, deleteStaff,
+  getStaffById, deleteStaff, archiveStaff, unarchiveStaff,
   getAttendanceByStaffAndMonth, getMonthlyAdvances,
   addAdvance, deleteAdvance, updateAdvance
 } from '../database/db';
@@ -241,6 +241,39 @@ export default function StaffDetailScreen({ route, navigation }) {
               )}
             </View>
           )}
+
+          <TouchableOpacity 
+            style={styles.archiveBtn} 
+            onPress={() => {
+              Alert.alert(
+                staff.is_archived ? 'Unarchive Staff' : 'Archive Staff',
+                staff.is_archived 
+                  ? `Restore ${staff.name} from archive? They will appear in the staff list again.`
+                  : `Archive ${staff.name}? Their attendance and advance records will be deleted, and they won't count towards your staff limit.`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { 
+                    text: staff.is_archived ? 'Restore' : 'Archive', 
+                    style: staff.is_archived ? 'default' : 'destructive',
+                    onPress: async () => {
+                      if (staff.is_archived) {
+                        await unarchiveStaff(staffId);
+                      } else {
+                        await archiveStaff(staffId);
+                      }
+                      await syncData();
+                      navigation.goBack();
+                    }
+                  },
+                ]
+              );
+            }}
+          >
+            <Ionicons name={staff.is_archived ? 'arrow-up-circle-outline' : 'archive-outline'} size={18} color={staff.is_archived ? '#2563EB' : '#6B7280'} />
+            <Text style={[styles.archiveBtnText, staff.is_archived && styles.archiveBtnTextRestore]}>
+              {staff.is_archived ? 'Restore from Archive' : 'Archive Staff'}
+            </Text>
+          </TouchableOpacity>
 
           <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
             <Ionicons name="trash-outline" size={18} color="#DC2626" />
@@ -499,6 +532,9 @@ const styles = StyleSheet.create({
   infoText: { fontSize: 13, color: '#374151', flex: 1 },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: '#FEE2E2', backgroundColor: '#FEF2F2' },
   deleteBtnText: { fontSize: 13, fontWeight: '500', color: '#DC2626', marginLeft: 6 },
+  archiveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', marginBottom: 10 },
+  archiveBtnText: { fontSize: 13, fontWeight: '500', color: '#6B7280', marginLeft: 6 },
+  archiveBtnTextRestore: { color: '#2563EB' },
   section: { backgroundColor: '#fff', margin: 16, marginTop: 0, borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   sectionTitle: { fontSize: 15, fontWeight: '600', color: '#111827', marginLeft: 8 },

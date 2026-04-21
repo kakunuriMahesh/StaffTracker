@@ -68,6 +68,7 @@ async function writePlanFile(data) {
 }
 
 export const STAFF_LIMIT_FREE = 5;
+export const STAFF_LIMIT_MONTHLY = 50;
 
 export const PLAN_TYPES = {
   FREE: 'free',
@@ -139,15 +140,20 @@ export async function canAddStaff(currentCount) {
   const planInfo = await getCurrentPlan();
   console.log('[PlanService] canAddStaff - planInfo:', planInfo);
   
-  // If plan is premium/active (not free), allow unlimited
-  if (planInfo.isActive && !planInfo.isFree) {
-    console.log('[PlanService] canAddStaff: true (premium plan)');
-    return true;
+  if (!planInfo.isActive || planInfo.isFree) {
+    const allowed = currentCount < STAFF_LIMIT_FREE;
+    console.log('[PlanService] canAddStaff:', allowed, 'current:', currentCount, 'limit:', STAFF_LIMIT_FREE);
+    return allowed;
   }
   
-  const allowed = currentCount < STAFF_LIMIT_FREE;
-  console.log('[PlanService] canAddStaff:', allowed, 'current:', currentCount, 'limit:', STAFF_LIMIT_FREE);
-  return allowed;
+  if (planInfo.userPlan === 'monthly') {
+    const allowed = currentCount < STAFF_LIMIT_MONTHLY;
+    console.log('[PlanService] canAddStaff:', allowed, 'current:', currentCount, 'limit:', STAFF_LIMIT_MONTHLY);
+    return allowed;
+  }
+  
+  console.log('[PlanService] canAddStaff: true (premium plan)');
+  return true;
 }
 
 export async function getPlanDetails() {
@@ -155,13 +161,22 @@ export async function getPlanDetails() {
   const active = isPlanActive(userPlan, planExpiry);
   const isExpired = !active && userPlan !== 'free' && userPlan !== 'lifetime';
   
+  let staffLimit;
+  if (!active || userPlan === 'free') {
+    staffLimit = STAFF_LIMIT_FREE;
+  } else if (userPlan === 'monthly') {
+    staffLimit = STAFF_LIMIT_MONTHLY;
+  } else {
+    staffLimit = -1;
+  }
+  
   return {
     userPlan,
     planExpiry,
     isActive: active,
     isExpired,
     isFree: userPlan === 'free',
-    staffLimit: !active ? STAFF_LIMIT_FREE : -1,
+    staffLimit,
   };
 }
 
@@ -224,6 +239,10 @@ export async function getStaffLimit() {
   
   if (userPlan === 'free' || !isActive) {
     return { limit: STAFF_LIMIT_FREE, isUnlimited: false, userPlan: 'free' };
+  }
+  
+  if (userPlan === 'monthly') {
+    return { limit: STAFF_LIMIT_MONTHLY, isUnlimited: false, userPlan: 'monthly' };
   }
   
   return { limit: -1, isUnlimited: true, userPlan };

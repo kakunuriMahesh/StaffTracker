@@ -183,7 +183,7 @@ export default function AddStaffScreen({ navigation }) {
       const allowed = await canAddStaff(staffCount);
       
       if (!allowed) {
-        showUpgradeAlert(navigation);
+        await showUpgradeAlert(navigation);
         return;
       }
     } catch (error) {
