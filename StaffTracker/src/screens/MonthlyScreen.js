@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Pressable } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,10 +7,11 @@ import { Calendar } from 'react-native-calendars';
 import dayjs from 'dayjs';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { getAllStaff, getAttendanceByStaffAndMonth, getAttendanceByDateRange, getMonthlyAdvances, getAdvancesByDateRange } from '../database/db';
+import { getAllStaff, getAttendanceByStaffAndMonth, getAttendanceByDateRange, getMonthlyAdvances, getAdvancesByDateRange, markAttendance } from '../database/db';
 import { calculateSalary } from '../utils/salary';
 import { applyStaffLocking } from '../utils/staffAccessControl';
 import { addPlanChangeListener } from '../services/planService';
+import { showLockedAlert } from '../utils/upgradeHelper';
 
 const FILTER_TYPES = [
   { key: 'monthly', label: 'Monthly' },
@@ -32,6 +33,11 @@ export default function MonthlyScreen() {
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [datePickerMode, setDatePickerMode] = useState('start');
+  const [showActionPopup, setShowActionPopup] = useState(false);
+  const [actionDate, setActionDate] = useState(null);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [existingNote, setExistingNote] = useState('');
 
   useEffect(() => {
     const handlePlanChange = () => {
@@ -108,11 +114,7 @@ export default function MonthlyScreen() {
       salaryToUse = present * selected.salary;
     } else if (staffSalaryType === 'weekly') {
       paidDays = present + leave;
-      const weeklyDays = 7;
-      salaryToUse = (selected.salary / weeklyDays) * paidDays;
-    } else if (staffSalaryType === 'manual' || filterType === 'custom') {
-      paidDays = present + leave;
-      salaryToUse = (selected.salary / daysInMonth) * paidDays;
+      salaryToUse = (selected.salary / 7) * paidDays;
     } else {
       paidDays = present + leave;
       salaryToUse = (selected.salary / days) * paidDays;
@@ -177,6 +179,52 @@ export default function MonthlyScreen() {
       setCustomEnd(selectedDate);
     }
     setShowCalendarPicker(false);
+  };
+
+  const openActionPopup = (date) => {
+    if (!selected) return;
+    if (selected.isLocked) {
+      showLockedAlert();
+      return;
+    }
+    const existing = attendance.find(a => a.date === date);
+    setActionDate(date);
+    setExistingNote(existing?.note || '');
+    setShowActionPopup(true);
+  };
+
+  const handleQuickMark = async (status) => {
+    if (!actionDate || !selected) return;
+    setShowActionPopup(false);
+    try {
+      const existing = attendance.find(a => a.date === actionDate);
+      await markAttendance(selected.id, actionDate, status, existing?.note || '');
+      loadData();
+    } catch (error) {
+      console.log('Mark attendance error:', error);
+      Alert.alert('Error', 'Failed to mark attendance');
+    }
+  };
+
+  const openNoteModal = () => {
+    setShowActionPopup(false);
+    setNoteText(existingNote);
+    setShowNoteModal(true);
+  };
+
+  const saveNote = async () => {
+    if (!actionDate) return;
+    try {
+      const existing = attendance.find(a => a.date === actionDate);
+      const currentStatus = existing?.status || 'P';
+      await markAttendance(selected.id, actionDate, currentStatus, noteText.trim());
+      setShowNoteModal(false);
+      setNoteText('');
+      loadData();
+    } catch (error) {
+      console.log('Save note error:', error);
+      Alert.alert('Error', 'Failed to save note');
+    }
   };
 
   const getCalendarTheme = () => ({
@@ -272,6 +320,7 @@ export default function MonthlyScreen() {
           </View>
           <Calendar markedDates={markedDates} style={styles.calendar}
             current={now.format('YYYY-MM-DD')}
+            onDayPress={(day) => openActionPopup(day.dateString)}
             theme={{ todayTextColor:'#2563EB', arrowColor:'#2563EB', calendarBackground:'#fff'}}/>
 
           {summary && (
@@ -401,6 +450,78 @@ export default function MonthlyScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      <Modal visible={showActionPopup} transparent animationType="fade" onRequestClose={() => setShowActionPopup(false)}>
+        <Pressable style={styles.modalOverlayCenter} onPress={() => setShowActionPopup(false)}>
+          <Pressable style={styles.actionPopup} onPress={() => {}}>
+            <Text style={styles.actionTitle}>
+              {actionDate ? dayjs(actionDate).format('DD MMM YYYY') : ''}
+            </Text>
+            <Text style={styles.actionSubtitle}>Mark attendance:</Text>
+            <View style={styles.actionBtns}>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnP]} onPress={() => handleQuickMark('P')}>
+                <Ionicons name="checkmark-circle" size={24} color="#065F46" />
+                <Text style={[styles.actionBtnText, { color: '#065F46' }]}>Present</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnA]} onPress={() => handleQuickMark('A')}>
+                <Ionicons name="close-circle" size={24} color="#991B1B" />
+                <Text style={[styles.actionBtnText, { color: '#991B1B' }]}>Absent</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnL]} onPress={() => handleQuickMark('L')}>
+                <Ionicons name="time-outline" size={24} color="#92400E" />
+                <Text style={[styles.actionBtnText, { color: '#92400E' }]}>Leave</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnNote]} onPress={openNoteModal}>
+                <Ionicons name="document-text-outline" size={24} color="#2563EB" />
+                <Text style={[styles.actionBtnText, { color: '#2563EB' }]}>Note</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.actionCancelBtn} onPress={() => setShowActionPopup(false)}>
+              <Text style={styles.actionCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={showNoteModal} transparent animationType="fade" onRequestClose={() => setShowNoteModal(false)}>
+        <Pressable style={styles.modalOverlayCenter} onPress={() => setShowNoteModal(false)}>
+          <Pressable style={styles.noteModalBox} onPress={() => {}}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalTitle}>Add Note</Text>
+              <TouchableOpacity onPress={() => setShowNoteModal(false)}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.quickNoteDate}>
+              {actionDate ? dayjs(actionDate).format('DD MMMM YYYY') : ''}
+            </Text>
+            <TextInput
+              style={styles.noteInput}
+              placeholder="Enter note..."
+              placeholderTextColor="#9CA3AF"
+              value={noteText}
+              onChangeText={setNoteText}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+            <View style={styles.modalBtns}>
+              <TouchableOpacity 
+                style={styles.modalCancelBtn}
+                onPress={() => { setShowNoteModal(false); setNoteText(''); }}
+              >
+                <Text style={styles.modalCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.modalSaveBtn}
+                onPress={saveNote}
+              >
+                <Text style={styles.modalSaveBtnText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -486,4 +607,26 @@ const styles = StyleSheet.create({
   calendarTitle: { fontSize: 16, fontWeight: '600', color: '#0F172A' },
   closeBtn: { padding: 4 },
   calendarInner: { borderRadius: 20 },
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  actionPopup: { backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '85%', maxWidth: 320 },
+  actionTitle: { fontSize: 18, fontWeight: '700', color: '#111827', textAlign: 'center', marginBottom: 4 },
+  actionSubtitle: { fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 16 },
+  actionBtns: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10 },
+  actionBtn: { width: '47%', padding: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  actionBtnP: { backgroundColor: '#D1FAE5' },
+  actionBtnA: { backgroundColor: '#FEE2E2' },
+  actionBtnL: { backgroundColor: '#FEF3C7' },
+  actionBtnNote: { backgroundColor: '#EFF6FF', width: '100%' },
+  actionBtnText: { fontSize: 13, fontWeight: '600', marginTop: 4 },
+  actionCancelBtn: { marginTop: 16, padding: 12, alignItems: 'center' },
+  actionCancelText: { fontSize: 14, fontWeight: '600', color: '#9CA3AF' },
+  noteModalBox: { backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '85%', maxWidth: 320 },
+  modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  quickNoteDate: { fontSize: 13, color: '#6B7280', marginBottom: 12, textAlign: 'center' },
+  noteInput: { backgroundColor: '#F9FAFB', borderRadius: 12, padding: 14, fontSize: 15, color: '#111827', minHeight: 100, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 16 },
+  modalBtns: { flexDirection: 'row', gap: 12 },
+  modalCancelBtn: { flex: 1, padding: 14, borderRadius: 12, backgroundColor: '#F3F4F6', alignItems: 'center' },
+  modalCancelBtnText: { fontSize: 15, fontWeight: '600', color: '#6B7280' },
+  modalSaveBtn: { flex: 1, padding: 14, borderRadius: 12, backgroundColor: '#2563EB', alignItems: 'center' },
+  modalSaveBtnText: { fontSize: 15, fontWeight: '600', color: '#fff' },
 });

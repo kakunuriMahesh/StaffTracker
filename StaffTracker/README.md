@@ -1,224 +1,325 @@
 # StaffTracker
 
-A mobile application for managing household staff, tracking attendance, and calculating salary payments. Built with Expo (React Native) and SQLite.
+A comprehensive staff management mobile application built with React Native (Expo). Manage your household staff including maids, cooks, drivers, gardeners, security guards, and more with easy attendance tracking, salary management, and cloud sync capabilities.
 
 ## Features
 
-- **Staff Management**: Add, edit, and delete staff members with roles (Maid, Cook, Driver, Gardener, Security, Watchman)
-- **Daily Attendance**: Mark daily attendance as Present, Absent, or Leave
-- **Monthly Summary**: View attendance calendar and salary calculations per staff
-- **Salary Calculation**: Automatic salary pro-rata based on attendance
-- **Advance Payments**: Record and track advance payments to staff
-- **Payslip Export**: Generate and share salary slips as PDF
-- **Google Sign-In**: Sync data with Google Drive (optional)
-- **Offline Support**: Works without internet, syncs when online
+### Core Features
+- **Staff Management**: Add, edit, view, and delete staff members
+- **Attendance Tracking**: Mark daily attendance (Present, Absent, Leave)
+- **Salary Calculation**: Automatic salary calculation based on attendance
+- **Advance Payments**: Track and manage advance payments to staff
+- **Archive System**: Archive staff members without losing data (WhatsApp-style undo feature)
 
----
+### Plan System
+- **Free Plan**: Up to 5 staff members
+- **Monthly Plan**: Up to 50 staff members (₹99/month)
+- **Yearly Plan**: Unlimited staff (₹599/year)
+- **Lifetime Plan**: Unlimited staff forever (₹999 one-time)
 
-## Quick Start (No Setup Required)
+### Cloud Sync
+- **Google Sign-In**: Sync data across devices using Google Drive
+- **Backup & Restore**: Export and import data in JSON format
 
-```bash
-# Install dependencies
-npm install
+### Additional Features
+- Role-based staff categories (Maid, Cook, Driver, Gardener, Security, Watchman, Custom)
+- Salary types (Daily, Weekly, Monthly)
+- Sunday holiday configuration
+- Staff notes and important information
+- Profile screen with statistics
 
-# Start the app (works immediately with local storage)
-npx expo start
+## Tech Stack
 
-# Or tap "Continue without login" on the login screen
-```
+- **Framework**: React Native with Expo SDK 54
+- **Language**: JavaScript
+- **Navigation**: React Navigation v7
+- **State Management**: React Context + Local Storage
+- **Storage**: AsyncStorage + Expo FileSystem
+- **Authentication**: Google Sign-In (react-native-google-signin)
+- **Calendar**: react-native-calendars
+- **Date Handling**: dayjs
 
-The app works **fully offline** without Google Sign-In. Just tap "Continue without login".
-
----
-
-## Part 1: Building the App (APK)
-
-### Option A: Local Debug Build (Free - Recommended for testing)
-
-```bash
-# Build debug APK locally
-cd android
-./gradlew assembleDebug
-
-# APK will be at: android/app/build/outputs/apk/debug/app-debug.apk
-```
-
-Or use Expo:
-```bash
-npx expo run:android
-```
-
-**This creates a working APK** that installs and runs on any Android device.
-
-### Option B: EAS Build (For production release)
-
-**Requires EAS account** (free to sign up):
-```bash
-# 1. Login to EAS
-npx eas login
-
-# 2. Configure project (first time)
-npx eas project init
-
-# 3. Build Android APK
-npx eas build -p android --profile preview
-
-# 4. Or build for Play Store
-npx eas build -p android --profile production
-```
-
-**EAS is only needed if you want:**
-- Play Store release (signed with Play keystore)
-- TestFlight for iOS
-- Remote builds (not local computer)
-
-**For local testing, just use Option A** - it's free and works.
-
----
-
-## Part 2: Google Sign-In Setup (Optional)
-
-**This is FREE** - uses Google Cloud Console (no EAS needed).
-
-To enable Google Sign-In, update `src/auth/authService.js` after creating the OAuth client:
-
-```bash
-# Edit the authService.js file and replace:
-#   const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
-#   const REDIRECT_URI = 'https://auth.expo.io/@your-username/stafftracker';
-# With your actual values from Google Cloud Console
-nano src/auth/authService.js
-```
-
-### Why Google Sign-In?
-
-- Syncs data to Google Drive (backup across devices)
-- No manual backup/restore needed
-
-### Step 1: Create OAuth Client in Google Cloud Console
-
-1. Go to: https://console.cloud.google.com/
-2. Select your project (or create new)
-3. Go to **APIs & Services** → **Credentials**
-4. Click **Create Credentials** → **OAuth client ID**
-5. Choose **Web application**
-6. Fill:
-   - **Name**: `StaffTracker`
-   - **Authorized JavaScript origins**: `https://auth.expo.io`
-   - **Authorized redirect URIs**: Click "Add URI" and add:
-     ```
-     https://auth.expo.io/@your-expo-username/stafftracker
-     ```
-     (Replace `@your-expo-username` with your Expo username)
-7. Click **Create**
-8. Copy the **Client ID** (ends in `.apps.googleusercontent.com`)
-
-### Step 2: Update the App
-
-1. Open `src/auth/authService.js`
-2. Replace `YOUR_GOOGLE_CLIENT_ID` with your actual Client ID:
-```javascript
-const GOOGLE_CLIENT_ID = '123456789-abc.apps.googleusercontent.com';
-```
-
-### Step 3: Test
-
-```bash
-npx expo start
-```
-
-Now "Sign in with Google" will work.
-
----
-
-## Part 3: Google Play Store (Optional)
-
-**Requires:**
-1. Google Play Developer account ($25 one-time)
-2. EAS build OR local release build
-
-### To build for Play Store:
-
-```bash
-# 1. Generate signing key (one time)
-keytool -genkeypair -v keystore my-release-key.keystore -alias release -keyalg RSA -keysize 2048 -validity 10000
-
-# 2. Configure eas.json with your keystore
-npx eas build -p android --profile production
-
-# 3. Upload to Play Store
-npx eas submit -p android
-```
-
----
-
-## Summary: What You Need
-
-| Task | Required | Cost |
-|------|----------|------|
-| Run app locally | Nothing | Free |
-| Local APK test | Option A | Free |
-| Google Sign-In | Google Cloud Console | Free |
-| EAS Build | EAS account | Free |
-| Play Store release | Play Developer + EAS | $25 + free |
-
----
-
-## Part 4: Firebase Migration (Future)
-
-The JSON structure is ready for Firebase migration:
-
-```json
-{
-  "staff": [{ "id": 1, "name": "..." }],
-  "attendance": [{ "staffId": 1, "date": "...", "status": "P" }],
-  "payments": [{ "staffId": 1, "amount": 5000 }],
-  "settings": { "syncFrequency": "daily" },
-  "metadata": { "version": "1.0.0" }
-}
-```
-
-Maps directly to Firestore collections.
-
----
-
-## App Structure
+## Project Structure
 
 ```
 StaffTracker/
-├── App.js                 # Main app with navigation
-├── app.json              # Expo configuration
+├── App.js                    # Main app entry with navigation
 ├── src/
-│   ├── auth/
-│   │   └── authService.js     # Google OAuth
-│   ├── services/
-│   │   ├── driveService.js   # Google Drive API
-│   │   ├── syncManager.js   # Sync logic
-│   │   └── jsonDataService.js # Data conversion
-│   ├── database/
-│   │   └── db.js           # SQLite operations
-│   └── screens/
-│       ├── LoginScreen.js
-│       ├── HomeScreen.js
-│       ├── DailyScreen.js
-│       ├── MonthlyScreen.js
-│       ├── ProfileScreen.js
-│       └── SyncSettingsScreen.js
+│   ├── components/          # Reusable components
+│   │   └── Toast.js         # Toast notification component
+│   ├── database/            # Database layer
+│   │   └── db.js           # SQLite-like JSON storage
+│   ├── screens/            # App screens
+│   │   ├── HomeScreen.js           # Main staff list
+│   │   ├── AddStaffScreen.js       # Add new staff
+│   │   ├── EditStaffScreen.js     # Edit staff details
+│   │   ├── StaffDetailScreen.js   # Staff profile & attendance
+│   │   ├── DailyScreen.js         # Today's attendance
+│   │   ├── MonthlyScreen.js       # Monthly summary
+│   │   ├── ProfileScreen.js       # User profile
+│   │   ├── ArchiveScreen.js      # Archived staff
+│   │   ├── UpgradeScreen.js     # Plan upgrade
+│   │   └── SyncSettingsScreen.js # Cloud sync settings
+│   ├── services/            # Business logic services
+│   │   ├── planService.js        # Plan & limit management
+│   │   ├── syncManager.js       # Cloud sync logic
+│   │   └── staffReload.js        # Live reload triggers
+│   ├── storage/            # Local storage
+│   │   └── localStorage.js       # JSON file storage
+│   ├── utils/              # Utility functions
+│   │   ├── salary.js           # Salary calculation
+│   │   ├── staffAccessControl.js # Staff locking logic
+│   │   └── upgradeHelper.js   # Upgrade alerts
+│   └── database/           # Database functions
+│       └── db.js           # All CRUD operations
+├── package.json
+└── README.md
 ```
+
+## Installation
+
+1. **Clone the repository**
+   ```bash
+   cd StaffTracker
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Start the development server**
+   ```bash
+   npm start
+   ```
+
+4. **Run on Android**
+   ```bash
+   npm run android
+   ```
+
+5. **Run on iOS**
+   ```bash
+   npm run ios
+   ```
+
+## Archive Feature
+
+The app includes a WhatsApp-style archive system:
+
+- **Archive Staff**: Click the Archive button on any staff detail page
+- **Undo**: A toast appears for 3 seconds with "Undo" option
+- **Automatic Cleanup**: After 3 seconds, attendance records are permanently deleted
+- **Archive List**: View all archived staff in the Archive screen
+- **Restore**: Restore archived staff anytime from the Archive screen
+- **Plan Counting**: Archived staff don't count towards your plan's staff limit
+
+## Plan Limits
+
+| Plan | Staff Limit | Features |
+|------|-------------|----------|
+| Free | 5 | Basic attendance, local storage |
+| Monthly | 50 | All features, cloud sync |
+| Yearly | Unlimited | All features, priority support |
+| Lifetime | Unlimited | All features forever |
+
+## Data Storage
+
+- **Staff Data**: Stored in local JSON files
+- **Attendance**: Date-based attendance records
+- **Advances**: Advance payment history
+- **Settings**: Plan information and preferences
+- **Cloud Backup**: Exported as JSON to Google Drive
+
+## Screen Overview
+
+### Home Screen
+- List of all active staff
+- Quick attendance status badges with tap-to-update
+- Today's date and statistics
+- Quick add button
+- Archive and sync settings access
+
+### Staff Detail Screen
+- Staff profile (name, position, salary)
+- Attendance calendar with quick actions
+- Monthly summary (present/absent/leave counts)
+- Salary breakdown
+- Notes section with sorting toggle
+- Advance payment management
+- Edit and Archive/Delete options
+
+### Daily Screen (Attendance)
+- Date picker for selecting attendance date
+- Per-staff attendance marking
+- Quick status buttons (Present/Absent/Leave)
+- Filter by status
+- Summary stats
+
+### Monthly Screen
+- Staff selector pills
+- Filter by period (Monthly/Weekly/Custom)
+- Attendance calendar with quick actions
+- Salary calculation per staff
+- Share payslip feature
+
+### Add/Edit Staff Screen
+- Staff information form
+- Role selection with custom option
+- Salary type (Daily/Weekly/Monthly)
+- Calendar date pickers
+- KeyboardAvoidingView for smooth input
+
+### Profile Screen
+- Staff count statistics
+- Current plan information
+- Upgrade options
+- App settings
+
+## Version History
+
+- **v1.0.0**: Initial release with core features
+- **v1.1.0**: UI/UX enhancements and salary type updates
 
 ---
 
-## Troubleshooting
+# Recent Updates (v1.1.0)
 
-| Error | Fix |
-|-------|-----|
-| "Invalid redirect_uri" | Update redirect URI in Google Cloud Console |
-| "Access denied" | Add authorized origins in Google Console |
-| "Token expired" | Re-login with Google |
-| Build fails | Run `npx expo install` first |
+## 1. Bottom Navigation Label Update
+
+**Location**: `App.js`
+
+- Changed tab label from "Today" to "Attendance"
+- Icon unchanged for familiar UX
+
+## 2. Keyboard Handling in Staff Form
+
+**Location**: `AddStaffScreen.js`, `EditStaffScreen.js`
+
+- Added `KeyboardAvoidingView` wrapper
+- Uses `behavior="padding"` for iOS
+- Uses `behavior="height"` for Android
+- `keyboardShouldPersistTaps="handled"` for smooth scrolling
+- Input fields never hidden behind keyboard
+
+## 3. Calendar Quick Actions (Per-Staff)
+
+**Location**: `StaffDetailScreen.js`, `MonthlyScreen.js`
+
+- Tap on any date in the calendar to show quick action popup
+- Options: Present (P), Absent (A), Leave (L), Add Note
+- Updates only the selected staff member
+- Fast and minimal clicks - no full page navigation
+- Respects locked staff
+
+### StaffDetailScreen Changes:
+- Added `markAttendance` import
+- Added action popup states and handlers
+- Calendar `onDayPress` triggers action popup
+- Note modal for adding/editing notes
+
+### MonthlyScreen Changes:
+- Added weekly salary type support
+- Calendar integration with quick actions
+- Per-selected-staff updates
+
+## 4. Notes Sorting
+
+**Location**: `StaffDetailScreen.js`
+
+- Notes now sorted in descending order by default (newest first)
+- Added sort toggle button (arrow up/down icon)
+- Click to toggle between descending and ascending
+- Uses `dayjs().valueOf()` for date comparison
+
+### Implementation:
+```javascript
+const noteSortDesc = useState(true); // default: newest first
+const noteDates = Object.keys(attendanceNotes).sort((a, b) => {
+  return noteSortDesc 
+    ? dayjs(b).valueOf() - dayjs(a).valueOf()
+    : dayjs(a).valueOf() - dayjs(b).valueOf();
+});
+```
+
+## 5. Quick Attendance Update via Status Dot
+
+**Location**: `HomeScreen.js`
+
+- Tap the attendance status dot to quickly mark attendance
+- Opens action popup with P/A/L/Note options
+- Updates only the selected staff member for today
+- Status dot visually updates immediately
+- Respects locked staff (disabled tap)
+
+### Features:
+- `markAttendance` import added
+- `notesMap` state for tracking notes
+- `showActionPopup` for quick actions
+- `showNoteModal` for adding notes
+- Color-coded status badges:
+  - Present: Green (#D1FAE5)
+  - Absent: Red (#FEE2E2)
+  - Leave: Yellow (#FEF3C7)
+
+## 6. Salary Type Updates
+
+**Location**: `AddStaffScreen.js`, `EditStaffScreen.js`, `StaffDetailScreen.js`, `MonthlyScreen.js`, `salary.js`
+
+### Changes:
+- **Removed**: Manual/Period-based salary type
+- **Added**: Weekly salary type
+
+### Updated Options:
+| Old | New |
+|-----|-----|
+| Daily | Daily |
+| Monthly | Weekly |
+| Manual | Monthly |
+
+### Salary Calculation Logic:
+
+**In `salary.js`:**
+```javascript
+if (staff.salary_type === 'daily') {
+  paidDays = present;
+  grossSalary = present * staff.salary;
+} else if (staff.salary_type === 'weekly') {
+  paidDays = present + leave;
+  grossSalary = (staff.salary / 7) * paidDays;
+} else {
+  paidDays = present + leave;
+  grossSalary = (staff.salary / daysInMonth) * paidDays;
+}
+```
+
+### UI Updates:
+- Label: "Weekly Salary (₹)"
+- Hint: "₹X per week"
+- Date picker defaults to current week
+
+---
+
+## Summary of Features Added
+
+| Feature | Location | Description |
+|---------|----------|-------------|
+| Bottom nav label | App.js | "Today" → "Attendance" |
+| Keyboard handling | AddStaffScreen.js | KeyboardAvoidingView |
+| Calendar quick actions | StaffDetailScreen.js | P/A/L/Note popup |
+| Calendar quick actions | MonthlyScreen.js | P/A/L/Note popup |
+| Notes sorting | StaffDetailScreen.js | Toggle sort order |
+| Status dot tap | HomeScreen.js | Quick attendance |
+| Weekly salary | AddStaffScreen.js | New salary type |
+| Weekly salary | EditStaffScreen.js | New salary type |
+| Weekly salary | salary.js | Calculation |
 
 ---
 
 ## License
 
-MIT
+Private - All Rights Reserved
+
+## Support
+
+For issues or questions, please contact the development team.

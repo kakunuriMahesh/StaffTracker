@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, Modal, TextInput, ActivityIndicator
+  Alert, Modal, TextInput, ActivityIndicator, Pressable
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -11,7 +11,7 @@ import dayjs from 'dayjs';
 import {
   getStaffById, deleteStaff, archiveStaff, unarchiveStaff, confirmArchive,
   getAttendanceByStaffAndMonth, getMonthlyAdvances,
-  addAdvance, deleteAdvance, updateAdvance
+  addAdvance, deleteAdvance, updateAdvance, markAttendance
 } from '../database/db';
 import { showToast } from '../components/Toast';
 import { calculateSalary } from '../utils/salary';
@@ -38,6 +38,12 @@ export default function StaffDetailScreen({ route, navigation }) {
   const [advNote,    setAdvNote]    = useState('');
   const [editingAdvId, setEditingAdvId] = useState(null);
   const [savingAdv, setSavingAdv] = useState(false);
+  const [showActionPopup, setShowActionPopup] = useState(false);
+  const [actionDate, setActionDate] = useState(null);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [existingNote, setExistingNote] = useState('');
+  const [noteSortDesc, setNoteSortDesc] = useState(true);
 
   const load = useCallback(async () => {
     const s = await getStaffById(staffId);
@@ -68,14 +74,18 @@ export default function StaffDetailScreen({ route, navigation }) {
     }
   });
 
-  const noteDates = Object.keys(attendanceNotes);
+  const noteDates = Object.keys(attendanceNotes).sort((a, b) => {
+    return noteSortDesc 
+      ? dayjs(b).valueOf() - dayjs(a).valueOf()
+      : dayjs(a).valueOf() - dayjs(b).valueOf();
+  });
   const hasNotes = noteDates.length > 0;
 
   const getDurationLabel = (type) => {
     switch (type) {
       case 'daily': return 'Daily';
+      case 'weekly': return 'Weekly';
       case 'monthly': return 'Monthly';
-      case 'manual': return 'Custom Period';
       default: return 'Monthly';
     }
   };
@@ -83,8 +93,8 @@ export default function StaffDetailScreen({ route, navigation }) {
   const getDurationIcon = (type) => {
     switch (type) {
       case 'daily': return 'today';
+      case 'weekly': return 'time-outline';
       case 'monthly': return 'calendar-outline';
-      case 'manual': return 'time-outline';
       default: return 'calendar-outline';
     }
   };
@@ -147,6 +157,51 @@ export default function StaffDetailScreen({ route, navigation }) {
         load();
       }},
     ]);
+  };
+
+  const openActionPopup = (date) => {
+    if (isLocked) {
+      showLockedAlert(navigation);
+      return;
+    }
+    const existing = attendance.find(a => a.date === date);
+    setActionDate(date);
+    setExistingNote(existing?.note || '');
+    setShowActionPopup(true);
+  };
+
+  const handleQuickMark = async (status) => {
+    if (!actionDate || !staff) return;
+    setShowActionPopup(false);
+    try {
+      const existing = attendance.find(a => a.date === actionDate);
+      await markAttendance(staffId, actionDate, status, existing?.note || '');
+      load();
+    } catch (error) {
+      console.log('Mark attendance error:', error);
+      Alert.alert('Error', 'Failed to mark attendance');
+    }
+  };
+
+  const openNoteModal = () => {
+    setShowActionPopup(false);
+    setNoteText(existingNote);
+    setShowNoteModal(true);
+  };
+
+  const saveNote = async () => {
+    if (!actionDate) return;
+    try {
+      const existing = attendance.find(a => a.date === actionDate);
+      const currentStatus = existing?.status || 'P';
+      await markAttendance(staffId, actionDate, currentStatus, noteText.trim());
+      setShowNoteModal(false);
+      setNoteText('');
+      load();
+    } catch (error) {
+      console.log('Save note error:', error);
+      Alert.alert('Error', 'Failed to save note');
+    }
   };
 
   if (!staff) return null;
@@ -376,6 +431,7 @@ export default function StaffDetailScreen({ route, navigation }) {
             markedDates={markedDates}
             style={styles.calendar}
             current={now.format('YYYY-MM-DD')}
+            onDayPress={(day) => openActionPopup(day.dateString)}
             theme={{
               todayTextColor: '#2563EB',
               arrowColor: '#2563EB',
@@ -387,9 +443,14 @@ export default function StaffDetailScreen({ route, navigation }) {
 
         {hasNotes && (
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="document-text-outline" size={18} color="#111827" />
-              <Text style={styles.sectionTitle}>Notes</Text>
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="document-text-outline" size={18} color="#111827" />
+                <Text style={styles.sectionTitle}>Notes</Text>
+              </View>
+              <TouchableOpacity onPress={() => setNoteSortDesc(!noteSortDesc)} style={styles.sortBtn}>
+                <Ionicons name={noteSortDesc ? 'arrow-down' : 'arrow-up'} size={16} color="#6B7280" />
+              </TouchableOpacity>
             </View>
             {noteDates.map(date => (
               <View key={date} style={styles.noteItem}>
@@ -522,6 +583,78 @@ export default function StaffDetailScreen({ route, navigation }) {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={showActionPopup} transparent animationType="fade" onRequestClose={() => setShowActionPopup(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowActionPopup(false)}>
+          <Pressable style={styles.actionPopup} onPress={() => {}}>
+            <Text style={styles.actionTitle}>
+              {actionDate ? dayjs(actionDate).format('DD MMM YYYY') : ''}
+            </Text>
+            <Text style={styles.actionSubtitle}>Mark attendance:</Text>
+            <View style={styles.actionBtns}>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnP]} onPress={() => handleQuickMark('P')}>
+                <Ionicons name="checkmark-circle" size={24} color="#065F46" />
+                <Text style={[styles.actionBtnText, { color: '#065F46' }]}>Present</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnA]} onPress={() => handleQuickMark('A')}>
+                <Ionicons name="close-circle" size={24} color="#991B1B" />
+                <Text style={[styles.actionBtnText, { color: '#991B1B' }]}>Absent</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnL]} onPress={() => handleQuickMark('L')}>
+                <Ionicons name="time-outline" size={24} color="#92400E" />
+                <Text style={[styles.actionBtnText, { color: '#92400E' }]}>Leave</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnNote]} onPress={openNoteModal}>
+                <Ionicons name="document-text-outline" size={24} color="#2563EB" />
+                <Text style={[styles.actionBtnText, { color: '#2563EB' }]}>Note</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.actionCancelBtn} onPress={() => setShowActionPopup(false)}>
+              <Text style={styles.actionCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={showNoteModal} transparent animationType="fade" onRequestClose={() => setShowNoteModal(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowNoteModal(false)}>
+          <Pressable style={styles.noteModalBox} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Note</Text>
+              <TouchableOpacity onPress={() => setShowNoteModal(false)}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.quickNoteDate}>
+              {actionDate ? dayjs(actionDate).format('DD MMMM YYYY') : ''}
+            </Text>
+            <TextInput
+              style={styles.noteInput}
+              placeholder="Enter note..."
+              placeholderTextColor="#9CA3AF"
+              value={noteText}
+              onChangeText={setNoteText}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+            <View style={styles.modalBtns}>
+              <TouchableOpacity 
+                style={styles.modalCancel}
+                onPress={() => { setShowNoteModal(false); setNoteText(''); }}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.modalSave}
+                onPress={saveNote}
+              >
+                <Text style={styles.modalSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -562,6 +695,8 @@ const styles = StyleSheet.create({
   archiveBtnTextRestore: { color: '#2563EB' },
   section: { backgroundColor: '#fff', margin: 16, marginTop: 0, borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  sortBtn: { padding: 4 },
   sectionTitle: { fontSize: 15, fontWeight: '600', color: '#111827', marginLeft: 8 },
   summaryGrid: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   summaryBox: { flex: 1, borderRadius: 12, padding: 12, alignItems: 'center' },
@@ -621,4 +756,20 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 8, width: '100%' },
   archiveBtnRestore: { borderColor: '#DBEAFE', backgroundColor: '#EFF6FF' },
   archiveBtnTextRestore: { color: '#2563EB' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  actionPopup: { backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '85%', maxWidth: 320 },
+  actionTitle: { fontSize: 18, fontWeight: '700', color: '#111827', textAlign: 'center', marginBottom: 4 },
+  actionSubtitle: { fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 16 },
+  actionBtns: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10 },
+  actionBtn: { width: '47%', padding: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  actionBtnP: { backgroundColor: '#D1FAE5' },
+  actionBtnA: { backgroundColor: '#FEE2E2' },
+  actionBtnL: { backgroundColor: '#FEF3C7' },
+  actionBtnNote: { backgroundColor: '#EFF6FF', width: '100%' },
+  actionBtnText: { fontSize: 13, fontWeight: '600', marginTop: 4 },
+  actionCancelBtn: { marginTop: 16, padding: 12, alignItems: 'center' },
+  actionCancelText: { fontSize: 14, fontWeight: '600', color: '#9CA3AF' },
+  noteModalBox: { backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '85%', maxWidth: 320 },
+  quickNoteDate: { fontSize: 13, color: '#6B7280', marginBottom: 12, textAlign: 'center' },
+  noteInput: { backgroundColor: '#F9FAFB', borderRadius: 12, padding: 14, fontSize: 15, color: '#111827', minHeight: 100, borderWidth: 1, borderColor: '#E5E7EB' },
 });

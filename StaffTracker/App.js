@@ -70,7 +70,7 @@ function Tabs({ navigation }) {
       })}
     >
       <Tab.Screen name="HomeTab"    component={HomeScreen}    options={{ tabBarLabel: 'Staff' }} />
-      <Tab.Screen name="DailyTab"   component={DailyScreen}   options={{ tabBarLabel: 'Today' }} />
+      <Tab.Screen name="DailyTab"   component={DailyScreen}   options={{ tabBarLabel: 'Attendance' }} />
       <Tab.Screen name="MonthlyTab" component={MonthlyScreen} options={{ tabBarLabel: 'Monthly' }} />
       <Tab.Screen name="ProfileTab" component={ProfileScreen} options={{ tabBarLabel: 'Profile' }} />
     </Tab.Navigator>

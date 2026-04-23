@@ -1,7 +1,8 @@
 import dayjs from 'dayjs';
 
 export const calculateSalary = (staff, attendanceRecords, advanceRecords, year, month) => {
-  const daysInMonth = dayjs(`${year}-${String(month).padStart(2, '0')}-01`).daysInMonth();
+  const currentDate = dayjs(`${year}-${String(month).padStart(2, '0')}-01`);
+  const daysInMonth = currentDate.daysInMonth();
   const present  = attendanceRecords.filter(r => r.status === 'P').length;
   const leave    = attendanceRecords.filter(r => r.status === 'L').length;
   const absent   = attendanceRecords.filter(r => r.status === 'A').length;
@@ -13,6 +14,9 @@ export const calculateSalary = (staff, attendanceRecords, advanceRecords, year, 
   if (staff.salary_type === 'daily') {
     paidDays = present;
     grossSalary = parseFloat((present * staff.salary).toFixed(2));
+  } else if (staff.salary_type === 'weekly') {
+    paidDays = present + leave;
+    grossSalary = parseFloat(((staff.salary / 7) * paidDays).toFixed(2));
   } else {
     paidDays = present + leave;
     grossSalary = parseFloat(((staff.salary / daysInMonth) * paidDays).toFixed(2));

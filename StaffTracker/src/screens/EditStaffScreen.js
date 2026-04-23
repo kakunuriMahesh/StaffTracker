@@ -10,8 +10,8 @@ import { showLockedAlert } from '../utils/upgradeHelper';
 const DEFAULT_ROLES = ['Maid', 'Cook', 'Driver', 'Gardener', 'Security', 'Watchman', 'Other'];
 const DURATION_TYPES = [
   { key: 'daily', label: 'Daily' },
+  { key: 'weekly', label: 'Weekly' },
   { key: 'monthly', label: 'Monthly' },
-  { key: 'manual', label: 'Manual' },
 ];
 
 export default function EditStaffScreen({ route, navigation }) {
@@ -166,20 +166,6 @@ export default function EditStaffScreen({ route, navigation }) {
       newErrors.joinDate = 'Please select joining date';
     }
     
-    if (salaryType === 'manual') {
-      if (!salaryStartDate) {
-        newErrors.salaryStartDate = 'Please select start date';
-      }
-      if (!salaryEndDate) {
-        newErrors.salaryEndDate = 'Please select end date';
-      }
-      if (salaryStartDate && salaryEndDate) {
-        if (dayjs(salaryEndDate).isBefore(dayjs(salaryStartDate))) {
-          newErrors.salaryEndDate = 'End date cannot be before start date';
-        }
-      }
-    }
-    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -227,8 +213,8 @@ export default function EditStaffScreen({ route, navigation }) {
   const getSalaryLabel = () => {
     switch (salaryType) {
       case 'daily': return 'Daily Wage (₹)';
+      case 'weekly': return 'Weekly Salary (₹)';
       case 'monthly': return 'Monthly Salary (₹)';
-      case 'manual': return 'Salary for Period (₹)';
       default: return 'Salary (₹)';
     }
   };
@@ -390,6 +376,9 @@ export default function EditStaffScreen({ route, navigation }) {
                   if (type.key === 'monthly') {
                     setSalaryStartDate(dayjs().startOf('month').format('YYYY-MM-DD'));
                     setSalaryEndDate(dayjs().endOf('month').format('YYYY-MM-DD'));
+                  } else if (type.key === 'weekly') {
+                    setSalaryStartDate(dayjs().startOf('week').format('YYYY-MM-DD'));
+                    setSalaryEndDate(dayjs().endOf('week').format('YYYY-MM-DD'));
                   } else if (type.key === 'daily') {
                     setSalaryStartDate('');
                     setSalaryEndDate('');
@@ -431,39 +420,6 @@ export default function EditStaffScreen({ route, navigation }) {
           </View>
         )}
 
-        {salaryType === 'manual' && (
-          <View style={[styles.dateRangeContainer, styles.cardStyle]}>
-            <View style={styles.dateField}>
-              <Text style={styles.dateLabel}>Start Date</Text>
-              <TouchableOpacity 
-                style={[styles.inputWrapper, styles.dateWrapper, errors.salaryStartDate && styles.inputError]}
-                onPress={() => openDatePicker('start')}
-              >
-                <Ionicons name="calendar" size={18} color={errors.salaryStartDate ? '#EF4444' : '#6B7280'} style={styles.inputIcon} />
-                <Text style={[styles.dateText, !salaryStartDate && styles.placeholderText]}>
-                  {salaryStartDate ? dayjs(salaryStartDate).format('DD MMM YYYY') : 'Start date'}
-                </Text>
-                <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
-              </TouchableOpacity>
-              {errors.salaryStartDate && <Text style={styles.errorText}>{errors.salaryStartDate}</Text>}
-            </View>
-            <View style={styles.dateField}>
-              <Text style={styles.dateLabel}>End Date</Text>
-              <TouchableOpacity 
-                style={[styles.inputWrapper, styles.dateWrapper, errors.salaryEndDate && styles.inputError]}
-                onPress={() => openDatePicker('end')}
-              >
-                <Ionicons name="calendar" size={18} color={errors.salaryEndDate ? '#EF4444' : '#6B7280'} style={styles.inputIcon} />
-                <Text style={[styles.dateText, !salaryEndDate && styles.placeholderText]}>
-                  {salaryEndDate ? dayjs(salaryEndDate).format('DD MMM YYYY') : 'End date'}
-                </Text>
-                <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
-              </TouchableOpacity>
-              {errors.salaryEndDate && <Text style={styles.errorText}>{errors.salaryEndDate}</Text>}
-            </View>
-          </View>
-        )}
-
         <View style={[styles.inputGroup, styles.cardStyle]}>
           <Text style={styles.label}>{getSalaryLabel()}</Text>
           <View style={[styles.inputWrapper, errors.salary && styles.inputError]}>
@@ -479,9 +435,13 @@ export default function EditStaffScreen({ route, navigation }) {
             />
           </View>
           {errors.salary && <Text style={styles.errorText}>{errors.salary}</Text>}
-          {salaryType !== 'manual' && salary.length > 0 && !errors.salary && (
+          {salary.length > 0 && !errors.salary && (
             <Text style={styles.salaryHint}>
-              ₹{parseFloat(salary || 0).toLocaleString('en-IN')} {salaryType === 'daily' ? 'per day' : 'per month'}
+              ₹{parseFloat(salary || 0).toLocaleString('en-IN')} {
+                salaryType === 'daily' ? 'per day' : 
+                salaryType === 'weekly' ? 'per week' : 
+                'per month'
+              }
             </Text>
           )}
           
