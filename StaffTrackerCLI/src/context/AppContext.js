@@ -13,9 +13,12 @@ export const AppProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const getActiveStaffList = () => staffList.filter(s => !s.is_deleted && !s.is_archived);
+  const getArchivedStaffList = () => staffList.filter(s => s.is_archived && !s.is_deleted);
+
   const isPlanActive = () => plan.status === 'Active';
   const isPremium = () => plan.type === 'Premium';
-  const getMaxStaffCount = () => (isPremium() ? Infinity : 5);
+  const getMaxStaffCount = () => (plan.type === 'Monthly' ? 50 : plan.type === 'Premium' ? Infinity : 5);
 
   const isStaffLocked = (staff) => {
     if (isPlanActive() || isPremium()) return false;
@@ -48,28 +51,46 @@ export const AppProvider = ({ children }) => {
   };
 
   const addStaff = async (staff) => {
+    const activeStaff = getActiveStaffList();
+    const maxCount = getMaxStaffCount();
+    
+    if (!isPremium() && activeStaff.length >= maxCount) {
+      return { error: 'limit_reached' };
+    }
+    
     const newStaff = {
       ...staff,
       id: Date.now().toString(),
       joinedDate: new Date().toISOString(),
       isActive: true,
       isLocked: false,
+      is_archived: false,
     };
     
     let updatedList = [...staffList, newStaff];
     
-    if (!isPremium() && updatedList.length > 5) {
-      updatedList = updatedList.sort((a, b) => 
-        new Date(a.joinedDate) - new Date(b.joinedDate)
-      );
-      updatedList = updatedList.map((s, i) => ({
-        ...s,
-        isLocked: i >= 5,
-      }));
+    const currentActive = updatedList.filter(s => !s.is_archived);
+    if (!isPremium() && plan.type === 'Monthly') {
+      const limit = 50;
+      currentActive.sort((a, b) => new Date(a.joinedDate) - new Date(b.joinedDate));
+      updatedList = updatedList.map(s => {
+        if (s.is_archived) return s;
+        const idx = currentActive.indexOf(s);
+        return { ...s, isLocked: idx >= limit };
+      });
+    } else if (!isPremium()) {
+      const limit = 5;
+      currentActive.sort((a, b) => new Date(a.joinedDate) - new Date(b.joinedDate));
+      updatedList = updatedList.map(s => {
+        if (s.is_archived) return s;
+        const idx = currentActive.indexOf(s);
+        return { ...s, isLocked: idx >= limit };
+      });
     }
     
     setStaffList(updatedList);
     await storageService.saveStaffList(updatedList);
+    return { success: true };
   };
 
   const updateStaff = async (id, updates) => {
@@ -82,6 +103,22 @@ export const AppProvider = ({ children }) => {
 
   const deleteStaff = async (id) => {
     const updatedList = staffList.filter(s => s.id !== id);
+    setStaffList(updatedList);
+    await storageService.saveStaffList(updatedList);
+  };
+
+  const archiveStaff = async (id) => {
+    const updatedList = staffList.map(s => 
+      s.id === id ? { ...s, is_archived: true, archived_at: new Date().toISOString() } : s
+    );
+    setStaffList(updatedList);
+    await storageService.saveStaffList(updatedList);
+  };
+
+  const unarchiveStaff = async (id) => {
+    const updatedList = staffList.map(s => 
+      s.id === id ? { ...s, is_archived: false, archived_at: null } : s
+    );
     setStaffList(updatedList);
     await storageService.saveStaffList(updatedList);
   };
@@ -177,12 +214,16 @@ export const AppProvider = ({ children }) => {
     isPlanActive,
     isPremium,
     getMaxStaffCount,
+    getActiveStaffList,
+    getArchivedStaffList,
     isStaffLocked,
     canEditStaff,
     canMarkAttendance,
     addStaff,
     updateStaff,
     deleteStaff,
+    archiveStaff,
+    unarchiveStaff,
     markAttendance,
     getAttendance,
     getNote,

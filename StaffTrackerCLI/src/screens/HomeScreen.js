@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useApp } from '../context/AppContext';
+import { addStaffReloadListener } from '../services/staffReload';
 
 const TODAY = new Date().toISOString().split('T')[0];
 const STATUS_COLOR = { P: '#D1FAE5', A: '#FEE2E2', L: '#FEF3C7' };
@@ -24,7 +25,7 @@ const STATUS_ICON = {
 const HomeScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const {
-    staffList,
+    getActiveStaffList,
     attendance,
     isStaffLocked,
     isPlanActive,
@@ -32,23 +33,33 @@ const HomeScreen = ({ navigation }) => {
     markAttendance,
     getAttendance,
     canMarkAttendance,
+    reloadData,
   } = useApp();
 
   const [todayMap, setTodayMap] = useState({});
 
   useEffect(() => {
+    const removeListener = addStaffReloadListener(() => {
+      reloadData();
+    });
+    return removeListener;
+  }, []);
+
+  useEffect(() => {
+    const activeList = getActiveStaffList();
     const map = {};
-    staffList.forEach((s) => {
+    activeList.forEach((s) => {
       const att = getAttendance(s.id, TODAY);
       if (att) map[s.id] = att;
     });
     setTodayMap(map);
-  }, [staffList, attendance]);
+  }, [attendance]);
 
   useFocusEffect(
     useCallback(() => {
+      const activeList = getActiveStaffList();
       const map = {};
-      staffList.forEach((s) => {
+      activeList.forEach((s) => {
         const att = getAttendance(s.id, TODAY);
         if (att) map[s.id] = att;
       });
@@ -58,20 +69,13 @@ const HomeScreen = ({ navigation }) => {
 
   const getRoleIcon = (role) => {
     switch (role) {
-      case 'Maid':
-        return 'home-outline';
-      case 'Cook':
-        return 'restaurant-outline';
-      case 'Driver':
-        return 'car-outline';
-      case 'Gardener':
-        return 'leaf-outline';
-      case 'Security':
-        return 'shield-checkmark-outline';
-      case 'Watchman':
-        return 'eye-outline';
-      default:
-        return 'person-outline';
+      case 'Maid': return 'home-outline';
+      case 'Cook': return 'restaurant-outline';
+      case 'Driver': return 'car-outline';
+      case 'Gardener': return 'leaf-outline';
+      case 'Security': return 'shield-checkmark-outline';
+      case 'Watchman': return 'eye-outline';
+      default: return 'person-outline';
     }
   };
 
@@ -95,41 +99,19 @@ const HomeScreen = ({ navigation }) => {
               {item.name}
             </Text>
             {isLocked && (
-              <Icon
-                name="lock-closed"
-                size={14}
-                color="#9CA3AF"
-                style={{ marginLeft: 4 }}
-              />
+              <Icon name="lock-closed" size={14} color="#9CA3AF" style={{ marginLeft: 4 }} />
             )}
           </View>
           <View style={styles.roleRow}>
-            <Icon
-              name={getRoleIcon(item.position)}
-              size={12}
-              color="#6B7280"
-            />
+            <Icon name={getRoleIcon(item.position)} size={12} color="#6B7280" />
             <Text style={styles.role}>{item.position || 'Staff'}</Text>
             <Text style={styles.separator}>·</Text>
-            <Text style={styles.salary}>
-              ₹{item.salary || 0}
-            </Text>
-            <Text style={styles.salaryFreq}>
-              /{item.salary_type === 'daily' ? 'day' : 'mo'}
-            </Text>
+            <Text style={styles.salary}>₹{item.salary || 0}</Text>
+            <Text style={styles.salaryFreq}>/{item.salary_type === 'daily' ? 'day' : 'mo'}</Text>
           </View>
         </View>
-        <View
-          style={[
-            styles.badge,
-            status ? { backgroundColor: STATUS_COLOR[status] } : styles.badgeEmpty,
-          ]}
-        >
-          <Icon
-            name={status ? STATUS_ICON[status] : 'ellipse-outline'}
-            size={18}
-            color={status ? STATUS_TEXT[status] : '#9CA3AF'}
-          />
+        <View style={[styles.badge, status ? { backgroundColor: STATUS_COLOR[status] } : styles.badgeEmpty]}>
+          <Icon name={status ? STATUS_ICON[status] : 'ellipse-outline'} size={18} color={status ? STATUS_TEXT[status] : '#9CA3AF'} />
         </View>
       </TouchableOpacity>
     );
@@ -140,6 +122,8 @@ const HomeScreen = ({ navigation }) => {
     const d = new Date();
     return `${days[d.getDay()]}, ${d.getDate()} ${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear()}`;
   };
+
+  const activeStaff = getActiveStaffList();
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -152,13 +136,16 @@ const HomeScreen = ({ navigation }) => {
           </View>
         </View>
         <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.archiveBtn} onPress={() => navigation.navigate('Archive')}>
+            <Icon name="archive-outline" size={20} color="#6B7280" />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('AddStaff')}>
             <Icon name="add" size={20} color="#fff" />
             <Text style={styles.addBtnText}>Add</Text>
           </TouchableOpacity>
         </View>
       </View>
-      {staffList.length === 0 ? (
+      {activeStaff.length === 0 ? (
         <View style={styles.empty}>
           <View style={styles.emptyIconContainer}>
             <Icon name="people-outline" size={48} color="#9CA3AF" />
@@ -172,7 +159,7 @@ const HomeScreen = ({ navigation }) => {
         </View>
       ) : (
         <FlatList
-          data={staffList}
+          data={activeStaff}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={{ paddingVertical: 8 }}
@@ -211,6 +198,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   addBtnText: { color: '#fff', fontWeight: '600', fontSize: 14, marginLeft: 4 },
+  archiveBtn: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   card: {
     flexDirection: 'row',

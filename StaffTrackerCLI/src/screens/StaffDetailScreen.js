@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useApp } from '../context/AppContext';
+import { showToast } from '../components/Toast';
 
 const STATUS_BG = { P: '#D1FAE5', A: '#FEE2E2', L: '#FEF3C7' };
 const STATUS_FG = { P: '#065F46', A: '#991B1B', L: '#92400E' };
@@ -25,7 +26,7 @@ const STATUS_ICON = {
 const StaffDetailScreen = ({ route, navigation }) => {
   const { staffId } = route.params || {};
   const insets = useSafeAreaInsets();
-  const { staffList, deleteStaff, isStaffLocked, canEditStaff, getAttendance, getNote, getStaffNotes, markAttendance, notes } = useApp();
+  const { staffList, deleteStaff, archiveStaff, unarchiveStaff, isStaffLocked, canEditStaff, getAttendance, getNote, getStaffNotes, markAttendance, notes, reloadData } = useApp();
 
   const staff = staffList.find((s) => s.id === staffId);
   const isLocked = staff ? isStaffLocked(staff) : false;
@@ -395,14 +396,66 @@ const StaffDetailScreen = ({ route, navigation }) => {
           </View>
         </View>
 
+        <View style={styles.actionRow}>
         <TouchableOpacity
           style={[styles.deleteBtn, !canEdit && styles.deleteBtnDisabled]}
           onPress={handleDelete}
           disabled={!canEdit}
         >
-          <Icon name="trash" size={20} color="#DC2626" />
-          <Text style={styles.deleteBtnText}>Delete Staff</Text>
+          <Icon name="trash" size={18} color="#DC2626" />
+          <Text style={styles.deleteBtnText}>Delete</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.archiveBtn, staff?.is_archived && styles.archiveBtnRestore]}
+          onPress={async () => {
+            if (staff?.is_archived) {
+              Alert.alert(
+                'Restore Staff',
+                `Restore ${staff.name} from archive?`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { 
+                    text: 'Restore', 
+                    onPress: async () => {
+                      await unarchiveStaff(staffId);
+                      reloadData();
+                      navigation.goBack();
+                    }
+                  },
+                ]
+              );
+            } else {
+              Alert.alert(
+                'Archive Staff',
+                `Archive ${staff.name}? They won't count towards your plan limit.`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { 
+                    text: 'Archive', 
+                    style: 'destructive',
+                    onPress: async () => {
+                      await archiveStaff(staffId);
+                      showToast(
+                        `${staff.name} archived`,
+                        async () => {
+                          await unarchiveStaff(staffId);
+                        }
+                      );
+                      navigation.goBack();
+                    }
+                  },
+                ]
+              );
+            }
+          }}
+        >
+          <Icon name={staff?.is_archived ? 'arrow-up-circle-outline' : 'archive-outline'} size={18} color={staff?.is_archived ? '#2563EB' : '#6B7280'} />
+          <Text style={[styles.archiveBtnText, staff?.is_archived && styles.archiveBtnTextRestore]}>
+            {staff?.is_archived ? 'Restore' : 'Archive'}
+          </Text>
+        </TouchableOpacity>
+      </View>
       </ScrollView>
 
       {renderDatePicker()}
@@ -520,11 +573,19 @@ const styles = StyleSheet.create({
   infoValue: { fontSize: 16, fontWeight: '600', color: '#0F172A' },
   divider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 8 },
   deleteBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#FEE2E2', padding: 16, borderRadius: 12, marginTop: 12,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#FEE2E2', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8,
   },
   deleteBtnDisabled: { opacity: 0.5 },
-  deleteBtnText: { color: '#DC2626', fontSize: 16, fontWeight: '600', marginLeft: 8 },
+  deleteBtnText: { color: '#DC2626', fontSize: 13, fontWeight: '500', marginLeft: 6 },
+  actionRow: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 16 },
+  archiveBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#F3F4F6', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB',
+  },
+  archiveBtnRestore: { backgroundColor: '#EFF6FF', borderColor: '#DBEAFE' },
+  archiveBtnText: { color: '#6B7280', fontSize: 13, fontWeight: '500', marginLeft: 6 },
+  archiveBtnTextRestore: { color: '#2563EB' },
   modalOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20,
   },

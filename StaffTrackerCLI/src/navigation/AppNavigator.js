@@ -14,6 +14,7 @@ import EditStaffScreen from '../screens/EditStaffScreen';
 import StaffDetailScreen from '../screens/StaffDetailScreen';
 import PlansScreen from '../screens/PlansScreen';
 import SyncSettingsScreen from '../screens/SyncSettingsScreen';
+import ArchiveScreen from '../screens/ArchiveScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -85,6 +86,7 @@ function MainStack() {
       <Stack.Screen name="StaffDetail" component={StaffDetailScreen} />
       <Stack.Screen name="Plans" component={PlansScreen} />
       <Stack.Screen name="SyncSettings" component={SyncSettingsScreen} />
+      <Stack.Screen name="Archive" component={ArchiveScreen} />
     </Stack.Navigator>
   );
 }
