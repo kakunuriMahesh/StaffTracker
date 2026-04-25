@@ -9,6 +9,8 @@ import {
   Alert,
   Modal,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -18,8 +20,8 @@ import { storageService } from '../services/storageService';
 const DEFAULT_ROLES = ['Maid', 'Cook', 'Driver', 'Gardener', 'Security', 'Watchman', 'Other'];
 const DURATION_TYPES = [
   { key: 'daily', label: 'Daily' },
+  { key: 'weekly', label: 'Weekly' },
   { key: 'monthly', label: 'Monthly' },
-  { key: 'manual', label: 'Manual' },
 ];
 
 const AddStaffScreen = ({ navigation }) => {
@@ -153,7 +155,12 @@ const AddStaffScreen = ({ navigation }) => {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.form}>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
+        <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
         <View style={[styles.inputGroup, styles.cardStyle]}>
           <Text style={styles.label}>Full Name</Text>
           <View
@@ -367,12 +374,14 @@ const AddStaffScreen = ({ navigation }) => {
           <Text style={styles.saveBtnText}>Save Staff</Text>
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
+  keyboardView: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Alert,
   Modal,
+  Pressable,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -37,6 +38,12 @@ const StaffDetailScreen = ({ route, navigation }) => {
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [attendNote, setAttendNote] = useState('');
+  const [showActionPopup, setShowActionPopup] = useState(false);
+  const [actionDate, setActionDate] = useState(null);
+  const [showQuickNote, setShowQuickNote] = useState(false);
+  const [quickNoteText, setQuickNoteText] = useState('');
+  const [existingNote, setExistingNote] = useState('');
+  const [noteSortDesc, setNoteSortDesc] = useState(true);
 
   const currentStatus = staff ? getAttendance(staff.id, selectedDate) : null;
 
@@ -99,6 +106,50 @@ const StaffDetailScreen = ({ route, navigation }) => {
       case 'Security': return 'shield-checkmark-outline';
       case 'Watchman': return 'eye-outline';
       default: return 'person-outline';
+    }
+  };
+
+  const openActionPopup = (date) => {
+    if (isLocked) {
+      Alert.alert('Locked', 'This staff is locked. Upgrade to premium to edit.');
+      return;
+    }
+    const existing = staffNotes[date] || '';
+    setActionDate(date);
+    setExistingNote(existing);
+    setShowActionPopup(true);
+  };
+
+  const handleQuickMark = async (status) => {
+    if (!actionDate || !staff) return;
+    setShowActionPopup(false);
+    try {
+      const existingNote = staffNotes[actionDate] || '';
+      await markAttendance(staff.id, actionDate, status, existingNote);
+      reloadData();
+    } catch (error) {
+      console.log('Mark attendance error:', error);
+      Alert.alert('Error', 'Failed to mark attendance');
+    }
+  };
+
+  const openNoteModal = () => {
+    setShowActionPopup(false);
+    setQuickNoteText(existingNote);
+    setShowQuickNote(true);
+  };
+
+  const saveQuickNote = async () => {
+    if (!actionDate || !staff) return;
+    try {
+      const currentStatus = staffNotes[actionDate] || 'P';
+      await markAttendance(staff.id, actionDate, currentStatus, quickNoteText.trim());
+      setShowQuickNote(false);
+      setQuickNoteText('');
+      reloadData();
+    } catch (error) {
+      console.log('Save note error:', error);
+      Alert.alert('Error', 'Failed to save note');
     }
   };
 
@@ -194,12 +245,14 @@ const StaffDetailScreen = ({ route, navigation }) => {
       const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
       const status = staff ? getAttendance(staff.id, dateStr) : null;
       days.push(
-        <View
+        <TouchableOpacity
           key={i}
           style={[
             styles.calendarDay,
             status && { backgroundColor: STATUS_BG[status] },
           ]}
+          onPress={() => openActionPopup(dateStr)}
+          disabled={isLocked}
         >
           <Text style={[styles.calendarDayText, status && { color: STATUS_FG[status] }]}>
             {i}
@@ -207,11 +260,22 @@ const StaffDetailScreen = ({ route, navigation }) => {
           {status && (
             <Icon name={STATUS_ICON[status]} size={10} color={STATUS_FG[status]} />
           )}
-        </View>
+        </TouchableOpacity>
       );
     }
     return days;
   };
+
+  const formatDateForPopup = (dateStr) => {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  const sortedNoteDates = Object.keys(staffNotes).sort((a, b) => {
+    return noteSortDesc 
+      ? new Date(b).getTime() - new Date(a).getTime()
+      : new Date(a).getTime() - new Date(b).getTime();
+  });
 
   if (!staff) {
     return (
@@ -348,14 +412,19 @@ const StaffDetailScreen = ({ route, navigation }) => {
 
         {Object.keys(staffNotes).length > 0 && (
           <View style={styles.notesSection}>
-            <Text style={styles.sectionTitle}>Notes</Text>
-            {Object.entries(staffNotes).map(([date, note]) => (
+            <View style={styles.notesHeaderRow}>
+              <Text style={styles.sectionTitle}>Notes</Text>
+              <TouchableOpacity onPress={() => setNoteSortDesc(!noteSortDesc)} style={styles.sortBtn}>
+                <Icon name={noteSortDesc ? 'arrow-down' : 'arrow-up'} size={16} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            {sortedNoteDates.map((date) => (
               <View key={date} style={styles.noteRow}>
                 <View style={styles.noteDate}>
                   <Icon name="calendar-outline" size={14} color="#6B7280" />
                   <Text style={styles.noteDateText}>{formatDate(date)}</Text>
                 </View>
-                <Text style={styles.noteText}>{note}</Text>
+                <Text style={styles.noteText}>{staffNotes[date]}</Text>
               </View>
             ))}
           </View>
@@ -460,6 +529,78 @@ const StaffDetailScreen = ({ route, navigation }) => {
 
       {renderDatePicker()}
       {renderNoteModal()}
+
+      <Modal visible={showActionPopup} transparent animationType="fade" onRequestClose={() => setShowActionPopup(false)}>
+        <Pressable style={styles.modalOverlayCenter} onPress={() => setShowActionPopup(false)}>
+          <Pressable style={styles.actionPopup} onPress={() => {}}>
+            <Text style={styles.actionTitle}>
+              {actionDate ? formatDateForPopup(actionDate) : ''}
+            </Text>
+            <Text style={styles.actionSubtitle}>Mark attendance:</Text>
+            <View style={styles.actionBtns}>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnP]} onPress={() => handleQuickMark('P')}>
+                <Icon name="checkmark-circle" size={24} color="#065F46" />
+                <Text style={[styles.actionBtnText, { color: '#065F46' }]}>Present</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnA]} onPress={() => handleQuickMark('A')}>
+                <Icon name="close-circle" size={24} color="#991B1B" />
+                <Text style={[styles.actionBtnText, { color: '#991B1B' }]}>Absent</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnL]} onPress={() => handleQuickMark('L')}>
+                <Icon name="time-outline" size={24} color="#92400E" />
+                <Text style={[styles.actionBtnText, { color: '#92400E' }]}>Leave</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnNote]} onPress={openNoteModal}>
+                <Icon name="document-text-outline" size={24} color="#2563EB" />
+                <Text style={[styles.actionBtnText, { color: '#2563EB' }]}>Note</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.actionCancelBtn} onPress={() => setShowActionPopup(false)}>
+              <Text style={styles.actionCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={showQuickNote} transparent animationType="fade" onRequestClose={() => setShowQuickNote(false)}>
+        <Pressable style={styles.modalOverlayCenter} onPress={() => setShowQuickNote(false)}>
+          <Pressable style={styles.noteModalBox} onPress={() => {}}>
+            <View style={styles.noteModalHeader}>
+              <Text style={styles.noteModalTitle}>Add Note</Text>
+              <TouchableOpacity onPress={() => setShowQuickNote(false)}>
+                <Icon name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.noteModalDate}>
+              {actionDate ? formatDateForPopup(actionDate) : ''}
+            </Text>
+            <TextInput
+              style={styles.noteInput}
+              placeholder="Enter note..."
+              placeholderTextColor="#9CA3AF"
+              value={quickNoteText}
+              onChangeText={setQuickNoteText}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+            <View style={styles.noteModalBtns}>
+              <TouchableOpacity 
+                style={styles.noteModalCancelBtn}
+                onPress={() => { setShowQuickNote(false); setQuickNoteText(''); }}
+              >
+                <Text style={styles.noteModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.noteModalSaveBtn}
+                onPress={saveQuickNote}
+              >
+                <Text style={styles.noteModalSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
@@ -627,6 +768,34 @@ const styles = StyleSheet.create({
   },
   noteDateText: { fontSize: 12, color: '#6B7280', marginLeft: 4 },
   noteText: { flex: 1, fontSize: 13, color: '#374151' },
+  notesHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  sortBtn: { padding: 4 },
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  actionPopup: { backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '85%', maxWidth: 320 },
+  actionTitle: { fontSize: 18, fontWeight: '700', color: '#111827', textAlign: 'center', marginBottom: 4 },
+  actionSubtitle: { fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 16 },
+  actionBtns: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10 },
+  actionBtn: { width: '47%', padding: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  actionBtnP: { backgroundColor: '#D1FAE5' },
+  actionBtnA: { backgroundColor: '#FEE2E2' },
+  actionBtnL: { backgroundColor: '#FEF3C7' },
+  actionBtnNote: { backgroundColor: '#EFF6FF', width: '100%' },
+  actionBtnText: { fontSize: 13, fontWeight: '600', marginTop: 4 },
+  actionCancelBtn: { marginTop: 16, padding: 12, alignItems: 'center' },
+  actionCancelText: { fontSize: 14, fontWeight: '600', color: '#9CA3AF' },
+  noteModalBox: { backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '85%', maxWidth: 320 },
+  noteModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  noteModalDate: { fontSize: 13, color: '#6B7280', marginBottom: 12, textAlign: 'center' },
+  noteModalBtns: { flexDirection: 'row', gap: 12 },
+  noteModalCancelBtn: { flex: 1, padding: 14, borderRadius: 12, backgroundColor: '#F3F4F6', alignItems: 'center' },
+  noteModalCancelText: { fontSize: 15, fontWeight: '600', color: '#6B7280' },
+  noteModalSaveBtn: { flex: 1, padding: 14, borderRadius: 12, backgroundColor: '#2563EB', alignItems: 'center' },
+  noteModalSaveText: { fontSize: 15, fontWeight: '600', color: '#fff' },
 });
+
+const formatDateSimple = (dateStr) => {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
 
 export default StaffDetailScreen;

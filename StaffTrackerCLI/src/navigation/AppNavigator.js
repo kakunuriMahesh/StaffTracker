@@ -61,7 +61,7 @@ function TabNavigator() {
       <Tab.Screen
         name="DailyTab"
         component={DailyScreen}
-        options={{ tabBarLabel: 'Today' }}
+        options={{ tabBarLabel: 'Attendance' }}
       />
       <Tab.Screen
         name="MonthlyTab"

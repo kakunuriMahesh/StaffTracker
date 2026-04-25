@@ -273,7 +273,7 @@ Working: ${summary.daysInPeriod} days
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 💰 SALARY BREAKDOWN
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-Base Salary: ₹${selected.salary} / ${selected.salary_type === 'daily' ? 'day' : 'month'}
+Base Salary: ₹${selected.salary} / ${selected.salary_type === 'daily' ? 'day' : selected.salary_type === 'weekly' ? 'week' : 'month'}
 Paid Days:  ${summary.paidDays}
 Gross:      ₹${summary.grossSalary}
 Advances:   -₹${summary.totalAdvances}
