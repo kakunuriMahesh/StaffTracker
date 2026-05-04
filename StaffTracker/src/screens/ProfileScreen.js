@@ -102,7 +102,7 @@ export default function ProfileScreen({ navigation }) {
       'If you enjoy using StaffTracker, please take a moment to rate us on the app store!',
       [
         { text: 'Later', style: 'cancel' },
-        { text: 'Rate Now', onPress: () => openURL('https://play.google.com/store/apps/details?id=com.srcdesigns.StaffTracker', 'Play Store') },
+        { text: 'Rate Now', onPress: () => openURL('https://play.google.com/store/apps/details?id=com.srcdesigns.stafftracker', 'Play Store') },
       ]
     );
   };
@@ -113,7 +113,7 @@ export default function ProfileScreen({ navigation }) {
       'Share this app with friends and family who might benefit from it!',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Share', onPress: () => openURL('https://play.google.com/store/apps/details?id=com.srcdesigns.StaffTracker', 'Play Store') },
+        { text: 'Share', onPress: () => openURL('https://play.google.com/store/apps/details?id=com.srcdesigns.stafftracker', 'Play Store') },
       ]
     );
   };

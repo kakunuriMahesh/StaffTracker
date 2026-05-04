@@ -13,7 +13,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.srcdesigns.StaffTracker",
+      "bundleIdentifier": "com.srcdesigns.stafftracker",
       "appVersion": "1.0.0",
       "buildNumber": "1"
     },
@@ -24,7 +24,7 @@
       },
       "edgeToEdgeEnabled": false,
       "newArchEnabled": false,
-      "package": "com.srcdesigns.StaffTracker",
+      "package": "com.srcdesigns.stafftracker",
       "versionCode": 1,
       "versionName": "1.0.0",
       "permissions": [
@@ -32,7 +32,7 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
       ],
-      "playStoreUrl": "https://play.google.com/store/apps/details?id=com.srcdesigns.StaffTracker"
+      "playStoreUrl": "https://play.google.com/store/apps/details?id=com.srcdesigns.stafftracker"
     },
     "web": {
       "favicon": "https://res.cloudinary.com/drqjqmsye/image/upload/v1776413303/StaffTrackerLogo.png"
