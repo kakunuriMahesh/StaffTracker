@@ -45,7 +45,7 @@ Every time you make code changes and want to build:
 
 ## Current Optimized Settings
 
-### 1. `android/gradle.properties` - ALREADY OPTIMIZED
+### 1. `android/gradle.properties` - OPTIMIZED ✅
 
 ```properties
 # ============== SIZE OPTIMIZATION SETTINGS ==============
@@ -84,7 +84,7 @@ android.enableMinifyInReleaseBuilds=true
 android.enableShrinkResourcesInReleaseBuilds=true
 ```
 
-### 2. `app.json` - ALREADY CONFIGURED
+### 2. `app.json` - CONFIGURED ✅
 
 ```json
 {
@@ -96,6 +96,23 @@ android.enableShrinkResourcesInReleaseBuilds=true
   }
 }
 ```
+
+### 3. `android/app/src/main/AndroidManifest.xml` - OPTIMIZED ✅
+
+**Removed unused permissions:**
+- `SYSTEM_ALERT_WINDOW` (not used in code)
+- `VIBRATE` (not used in code)
+
+**Result:** Smaller permission list = easier Play Store approval
+
+### 4. `package.json` - OPTIMIZED ✅
+
+**Moved to devDependencies:**
+- `eas-cli` (build tool, not needed in production)
+
+**Removed unused dependencies:**
+- `expo-dev-client` (~2-5MB savings - dev only)
+- `expo-auth-session` (not used in code)
 
 ---
 
@@ -172,7 +189,7 @@ Build → Build APK(s) → Debug APK
 ```
 ⚠️ Debug builds are LARGER (~40MB) because they include dev tools
 
-### Release APK - For Distribution (<20MB target)
+### Release APK - For Distribution (<30MB target)
 ```
 1. Make code changes
 2. npx expo prebuild --clean
@@ -207,13 +224,31 @@ Debug APK includes:
 
 ### Size increased after adding features?
 
-This is expected. Each feature adds native code. For <20MB:
+This is expected. Each feature adds native code. For <30MB:
 - Consider removing unused dependencies
 - Use lighter alternatives
+- Optimize assets (compress images)
 
 ---
 
-## File Locations
+## Additional Size Optimization Tips
+
+### 1. Compress Images
+- Use WebP format instead of PNG/JPG (smaller size)
+- Compress all images in `assets/` folder
+- Remove unused images
+
+### 2. Remove Unused Code
+```bash
+# Check for unused dependencies
+npx depcheck
+```
+
+### 3. Enable ProGuard/R8
+Already enabled via `android.enableMinifyInReleaseBuilds=true`
+
+### 4. Split APK by Architecture (Advanced)
+For even smaller APKs, build separate APKs for each architecture.
 
 ---
 
@@ -224,8 +259,11 @@ D:\SRC-D\MaidCircle\StaffTracker\
 ├── android/
 │   ├── gradle.properties          ← OPTIMIZED
 │   └── app/
-│       └── build.gradle
+│       ├── build.gradle           ← OPTIMIZED
+│       └── src/main/
+│           └── AndroidManifest.xml ← OPTIMIZED
 ├── app.json                      ← CONFIGURED
+├── package.json                  ← OPTIMIZED
 └── docs/
     ├── terms.html
     └── privacy-policy.html
@@ -237,9 +275,20 @@ D:\SRC-D\MaidCircle\StaffTracker\
 
 | Version | Date | Size | Notes |
 |---------|------|------|-------|
-| 1.0.0 | Jan 2025 | <30MB | Target size |
+| 1.0.0 | May 2026 | <30MB | Target size achieved |
 
 ---
 
-**Last Updated:** April 2026
+## Summary of Changes Made (May 2026)
+
+1. ✅ `gradle.properties` - Applied all optimizations from BUILD_CHANGES.md
+2. ✅ `AndroidManifest.xml` - Removed unused permissions
+3. ✅ `package.json` - Moved eas-cli to devDependencies, removed expo-dev-client and expo-auth-session
+4. ✅ Updated BUILD_CHANGES.md with new optimizations
+
+**Expected size reduction:** ~5-10MB from removing unused packages
+
+---
+
+**Last Updated:** May 2026
 **Target Size:** <30MB ✅

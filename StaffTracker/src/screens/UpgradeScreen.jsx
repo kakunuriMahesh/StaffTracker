@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import dayjs from 'dayjs';
-import { getUserPlan, setUserPlan, PLAN_TYPES, PLAN_PRICES, PLAN_LABELS, getPlanDetails } from '../services/planService';
+import { getPlanDetails } from '../services/planService';
 import { resetToFreePlan } from '../utils/upgradeHelper';
 
 const PLANS = [
   {
     id: 'free',
     name: 'Free',
+    type: 'free',
     price: 0,
     duration: 'Forever',
     features: ['Up to 5 staff members', 'Basic attendance tracking', 'Monthly salary calculation'],
@@ -18,6 +18,7 @@ const PLANS = [
   {
     id: 'monthly',
     name: 'Monthly',
+    type: 'paid',
     price: 99,
     duration: '/month',
     features: ['Up to 50 staff members', 'All premium features', 'Priority support', 'No ads'],
@@ -26,6 +27,7 @@ const PLANS = [
   {
     id: 'yearly',
     name: 'Yearly',
+    type: 'paid',
     price: 599,
     duration: '/year',
     features: ['Unlimited staff', 'All premium features', 'Priority support', 'Save ₹589/year'],
@@ -34,6 +36,7 @@ const PLANS = [
   {
     id: 'lifetime',
     name: 'Lifetime',
+    type: 'paid',
     price: 999,
     duration: 'one-time',
     features: ['Unlimited staff', 'All features forever', 'Lifetime support', 'Best value'],
@@ -44,7 +47,6 @@ const PLANS = [
 export default function UpgradeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [currentPlan, setCurrentPlan] = useState('free');
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     loadCurrentPlan();
@@ -64,48 +66,14 @@ export default function UpgradeScreen({ navigation }) {
     const selectedPlan = PLANS.find(p => p.id === planId);
     if (!selectedPlan) return;
 
-    Alert.alert(
-      `Upgrade to ${selectedPlan.name}`,
-      `This is a demo. In production, this would integrate with in-app purchases.\n\nPrice: ₹${selectedPlan.price}${selectedPlan.duration}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Simulate Purchase',
-          onPress: () => simulatePurchase(planId),
-        },
-      ]
-    );
-  };
-
-  const simulatePurchase = async (planId) => {
-    setLoading(true);
-    try {
-      let expiryDate = null;
-      
-      if (planId === 'monthly') {
-        expiryDate = dayjs().add(1, 'month').toISOString();
-      } else if (planId === 'yearly') {
-        expiryDate = dayjs().add(1, 'year').toISOString();
-      } else if (planId === 'lifetime') {
-        expiryDate = 'lifetime';
-      }
-
-      const success = await setUserPlan(planId, expiryDate);
-      
-      if (success) {
-        Alert.alert(
-          'Success!',
-          `You have been upgraded to ${PLAN_LABELS[planId]} plan.`,
-          [{ text: 'OK', onPress: () => navigation.goBack() }]
-        );
-      } else {
-        Alert.alert('Error', 'Failed to update plan. Please try again.');
-      }
-    } catch (error) {
-      console.log('[UpgradeScreen] Purchase error:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
-    } finally {
-      setLoading(false);
+    // TODO: Integrate Google Play Billing here using react-native-iap in future update
+    if (selectedPlan.type !== 'free') {
+      Alert.alert(
+        'Coming Soon',
+        'Premium plans will be available in the next update. Stay tuned!',
+        [{ text: 'OK' }]
+      );
+      return;
     }
   };
 
@@ -190,17 +158,11 @@ export default function UpgradeScreen({ navigation }) {
                 isCurrentPlan(plan.id) && styles.upgradeBtnDisabled,
               ]}
               onPress={() => handleUpgrade(plan.id)}
-              disabled={isCurrentPlan(plan.id) || loading}
+              disabled={isCurrentPlan(plan.id)}
             >
-              {loading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Text style={styles.upgradeBtnText}>
-                    {isCurrentPlan(plan.id) ? 'Current Plan' : 'Upgrade Now'}
-                  </Text>
-                </>
-              )}
+              <Text style={styles.upgradeBtnText}>
+                {isCurrentPlan(plan.id) ? 'Current Plan' : 'Upgrade Now'}
+              </Text>
             </TouchableOpacity>
           </View>
         ))}
@@ -208,7 +170,7 @@ export default function UpgradeScreen({ navigation }) {
         <View style={styles.noteSection}>
           <Ionicons name="information-circle" size={20} color="#64748B" />
           <Text style={styles.noteText}>
-            This is a demo version. In production, payments will be processed securely through the Play Store.
+            Premium plans are coming soon. Stay tuned for updates!
           </Text>
         </View>
 
