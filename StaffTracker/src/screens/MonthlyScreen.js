@@ -3,7 +3,6 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Pressable,
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { Calendar } from 'react-native-calendars';
 import dayjs from 'dayjs';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -21,7 +20,6 @@ const FILTER_TYPES = [
 ];
 
 export default function MonthlyScreen() {
-  const now = dayjs();
   const insets = useSafeAreaInsets();
   
   const [staff, setStaff] = useState([]);
@@ -29,11 +27,8 @@ export default function MonthlyScreen() {
   const [attendance, setAttendance] = useState([]);
   const [summary, setSummary] = useState(null);
   const [filterType, setFilterType] = useState('all');
+  const [periodDate, setPeriodDate] = useState(dayjs());
   const [showDropdown, setShowDropdown] = useState(false);
-  const [customStart, setCustomStart] = useState(now.startOf('month').format('YYYY-MM-DD'));
-  const [customEnd, setCustomEnd] = useState(now.endOf('month').format('YYYY-MM-DD'));
-  const [showCalendarPicker, setShowCalendarPicker] = useState(false);
-  const [datePickerMode, setDatePickerMode] = useState('start');
   const [showActionPopup, setShowActionPopup] = useState(false);
   const [actionDate, setActionDate] = useState(null);
   const [showNoteModal, setShowNoteModal] = useState(false);
@@ -79,7 +74,6 @@ export default function MonthlyScreen() {
   const loadData = useCallback(async () => {
     if (!selected) return;
     
-    const current = dayjs();
     let att;
     let advances = [];
     let startDate, endDate;
@@ -91,18 +85,18 @@ export default function MonthlyScreen() {
       att = await getAttendanceByDateRange(selected.id, startDate, endDate);
       advances = await getAdvancesByDateRange(selected.id, startDate, endDate);
     } else if (filterType === 'monthly') {
-      startDate = current.startOf('month').format('YYYY-MM-DD');
-      endDate = current.endOf('month').format('YYYY-MM-DD');
-      att = await getAttendanceByStaffAndMonth(selected.id, current.year(), current.month() + 1);
-      advances = await getMonthlyAdvances(selected.id, current.year(), current.month() + 1);
+      startDate = periodDate.startOf('month').format('YYYY-MM-DD');
+      endDate = periodDate.endOf('month').format('YYYY-MM-DD');
+      att = await getAttendanceByStaffAndMonth(selected.id, periodDate.year(), periodDate.month() + 1);
+      advances = await getMonthlyAdvances(selected.id, periodDate.year(), periodDate.month() + 1);
     } else if (filterType === 'weekly') {
-      startDate = current.startOf('week').format('YYYY-MM-DD');
-      endDate = current.endOf('week').format('YYYY-MM-DD');
+      startDate = periodDate.startOf('week').format('YYYY-MM-DD');
+      endDate = periodDate.endOf('week').format('YYYY-MM-DD');
       att = await getAttendanceByDateRange(selected.id, startDate, endDate);
       advances = await getAdvancesByDateRange(selected.id, startDate, endDate);
     } else {
-      startDate = current.format('YYYY-MM-DD');
-      endDate = current.format('YYYY-MM-DD');
+      startDate = periodDate.format('YYYY-MM-DD');
+      endDate = periodDate.format('YYYY-MM-DD');
       att = await getAttendanceByDateRange(selected.id, startDate, endDate);
       advances = await getAdvancesByDateRange(selected.id, startDate, endDate);
     }
@@ -119,7 +113,6 @@ export default function MonthlyScreen() {
     const unmarked = days - present - leave - absent;
     
     let paidDays, salaryToUse;
-    const daysInMonth = current.daysInMonth();
     
     if (staffSalaryType === 'daily') {
       paidDays = present;
@@ -148,7 +141,7 @@ export default function MonthlyScreen() {
       startDate,
       endDate,
     });
-  }, [selected, filterType]);
+  }, [selected, filterType, periodDate]);
 
   useFocusEffect(
     useCallback(() => {
@@ -178,22 +171,26 @@ export default function MonthlyScreen() {
     setShowDropdown(false);
   };
 
-  const openDatePicker = (mode) => {
-    setDatePickerMode(mode);
-    setShowCalendarPicker(true);
+  const prevPeriod = () => {
+    if (filterType === 'monthly') setPeriodDate(prev => prev.subtract(1, 'month'));
+    else if (filterType === 'weekly') setPeriodDate(prev => prev.subtract(1, 'week'));
+    else setPeriodDate(prev => prev.subtract(1, 'day'));
   };
 
-  const handleDateSelect = (day) => {
-    const selectedDate = day.dateString;
-    if (datePickerMode === 'start') {
-      setCustomStart(selectedDate);
-      if (dayjs(selectedDate).isAfter(dayjs(customEnd))) {
-        setCustomEnd(selectedDate);
-      }
-    } else {
-      setCustomEnd(selectedDate);
+  const nextPeriod = () => {
+    if (filterType === 'monthly') setPeriodDate(prev => prev.add(1, 'month'));
+    else if (filterType === 'weekly') setPeriodDate(prev => prev.add(1, 'week'));
+    else setPeriodDate(prev => prev.add(1, 'day'));
+  };
+
+  const getPeriodLabel = () => {
+    if (filterType === 'monthly') return periodDate.format('MMMM YYYY');
+    if (filterType === 'weekly') {
+      const start = periodDate.startOf('week');
+      const end = periodDate.endOf('week');
+      return `${start.format('DD MMM')} - ${end.format('DD MMM YYYY')}`;
     }
-    setShowCalendarPicker(false);
+    return periodDate.format('DD MMMM YYYY');
   };
 
   const openActionPopup = (date) => {
@@ -242,34 +239,6 @@ export default function MonthlyScreen() {
     }
   };
 
-  const getCalendarTheme = () => ({
-    backgroundColor: '#ffffff',
-    calendarBackground: '#ffffff',
-    textSectionTitleColor: '#6B7280',
-    selectedDayBackgroundColor: '#2563EB',
-    selectedDayTextColor: '#ffffff',
-    todayTextColor: '#2563EB',
-    dayTextColor: '#374151',
-    textDisabledColor: '#D1D5DB',
-    arrowColor: '#2563EB',
-    monthTextColor: '#111827',
-    textDayFontWeight: '500',
-    textMonthFontWeight: '600',
-    textDayHeaderFontWeight: '500',
-    textDayFontSize: 14,
-    textMonthFontSize: 16,
-    textDayHeaderFontSize: 12,
-  });
-
-  const markedDates = {};
-  attendance.forEach(r => {
-    markedDates[r.date] = {
-      selected: true,
-      selectedColor: r.status === 'P' ? '#D1FAE5' : r.status === 'A' ? '#FEE2E2' : '#FEF3C7',
-      selectedTextColor: r.status === 'P' ? '#065F46' : r.status === 'A' ? '#991B1B' : '#92400E',
-    };
-  });
-
   const sharePayslip = async () => {
     if (!selected || !summary) return;
     const html = `
@@ -304,9 +273,23 @@ export default function MonthlyScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <View style={styles.dropdownContainer}>
+        {filterType !== 'all' && (
+          <View style={styles.periodNav}>
+            <TouchableOpacity onPress={prevPeriod} style={styles.periodArrow}>
+              <Ionicons name="chevron-back" size={22} color="#2563EB" />
+            </TouchableOpacity>
+            <Text style={styles.periodLabel}>{getPeriodLabel()}</Text>
+            <TouchableOpacity onPress={nextPeriod} style={styles.periodArrow}>
+              <Ionicons name="chevron-forward" size={22} color="#2563EB" />
+            </TouchableOpacity>
+          </View>
+        )}
+        {filterType === 'all' && (
+          <Text style={styles.periodLabelAll}>All Periods</Text>
+        )}
+        <View style={styles.filterBtnWrapper}>
           <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowDropdown(!showDropdown)}>
-            <Ionicons name="calendar" size={16} color="#2563EB" />
+            <Ionicons name="filter" size={16} color="#2563EB" />
             <Text style={styles.dropdownBtnText}>{getFilterLabel()}</Text>
             <Ionicons name={showDropdown ? 'chevron-up' : 'chevron-down'} size={16} color="#2563EB" />
           </TouchableOpacity>
@@ -345,20 +328,23 @@ export default function MonthlyScreen() {
 
       {selected && (
         <>
-          {/* <View style={styles.legend}>
-            {[['#D1FAE5','#065F46','Present'],['#FEE2E2','#991B1B','Absent'],['#FEF3C7','#92400E','Leave']].map(([bg,fg,l]) => (
-              <View key={l} style={[styles.legendPill,{backgroundColor:bg}]}>
-                <Text style={[styles.legendText,{color:fg}]}>{l}</Text>
-              </View>
-            ))}
-          </View> */}
-          {/* <Calendar markedDates={markedDates} style={styles.calendar}
-            current={now.format('YYYY-MM-DD')}
-            onDayPress={(day) => openActionPopup(day.dateString)}
-            theme={{ todayTextColor:'#2563EB', arrowColor:'#2563EB', calendarBackground:'#fff'}}/> */}
-
           {summary && (
             <View style={styles.summaryCard}>
+              <View style={styles.periodBadge}>
+                <Ionicons name="calendar-outline" size={14} color="#2563EB" />
+                <Text style={styles.periodBadgeText}>
+                  {filterType === 'all' ? 'All time' : `${dayjs(summary.startDate).format('DD MMM YYYY')} — ${dayjs(summary.endDate).format('DD MMM YYYY')}`}
+                </Text>
+              </View>
+              <View style={styles.staffInfoRow}>
+                <View style={styles.staffAvatarSm}>
+                  <Text style={styles.staffAvatarSmText}>{selected.name[0].toUpperCase()}</Text>
+                </View>
+                <View>
+                  <Text style={styles.staffInfoName}>{selected.name}</Text>
+                  <Text style={styles.staffInfoPos}>{selected.position}</Text>
+                </View>
+              </View>
               <View style={styles.statsRow}>
                 {[
                   [summary.present,'Present','#D1FAE5','#065F46'],
@@ -372,6 +358,8 @@ export default function MonthlyScreen() {
                 ))}
               </View>
               <View style={styles.breakdown}>
+                <View style={styles.bRow}><Text style={styles.bLabel}>Base salary</Text><Text style={styles.bValue}>₹{selected.salary}/{selected.salary_type === 'daily' ? 'day' : selected.salary_type === 'weekly' ? 'week' : 'month'}</Text></View>
+                <View style={styles.bRow}><Text style={styles.bLabel}>Paid days</Text><Text style={styles.bValue}>{summary.paidDays} / {summary.daysInMonth}</Text></View>
                 <View style={styles.bRow}><Text style={styles.bLabel}>Gross salary</Text><Text style={styles.bValue}>₹{summary.grossSalary}</Text></View>
                 <View style={styles.bRow}><Text style={styles.bLabel}>Advances</Text><Text style={[styles.bValue,{color:'#DC2626'}]}>- ₹{summary.totalAdvances}</Text></View>
                 <View style={[styles.bRow,styles.bTotalRow]}>
@@ -413,34 +401,6 @@ export default function MonthlyScreen() {
           </View>
         </Pressable>
       )}
-
-      <Modal visible={showCalendarPicker} transparent animationType="fade">
-        <Pressable style={styles.modalOverlay} onPress={() => setShowCalendarPicker(false)}>
-          <View style={styles.calendarModal}>
-            <View style={styles.calendarHeader}>
-              <Text style={styles.calendarTitle}>
-                Select {datePickerMode === 'start' ? 'Start' : 'End'} Date
-              </Text>
-              <TouchableOpacity onPress={() => setShowCalendarPicker(false)} style={styles.closeBtn}>
-                <Ionicons name="close" size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-            <Calendar
-              current={datePickerMode === 'start' ? customStart : customEnd}
-              onDayPress={handleDateSelect}
-              markedDates={{
-                [datePickerMode === 'start' ? customStart : customEnd]: {
-                  selected: true,
-                  selectedColor: '#2563EB',
-                }
-              }}
-              minDate={datePickerMode === 'end' ? customStart : undefined}
-              theme={getCalendarTheme()}
-              style={styles.calendarInner}
-            />
-          </View>
-        </Pressable>
-      </Modal>
 
       <Modal visible={showActionPopup} transparent animationType="fade" onRequestClose={() => setShowActionPopup(false)}>
         <Pressable style={styles.modalOverlayCenter} onPress={() => setShowActionPopup(false)}>
@@ -519,10 +479,14 @@ export default function MonthlyScreen() {
 
 const styles = StyleSheet.create({
   container:   { flex: 1, backgroundColor: '#F3F4F6' },
-  header:      { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  dropdownContainer: {},
-  dropdownBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderWidth: 1, borderColor: '#BFDBFE' },
-  dropdownBtnText: { fontSize: 14, color: '#2563EB', marginHorizontal: 8, fontWeight: '600' },
+  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  periodNav:   { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  periodArrow: { padding: 6 },
+  periodLabel: { fontSize: 16, fontWeight: '600', color: '#111827', marginHorizontal: 8 },
+  periodLabelAll: { fontSize: 16, fontWeight: '600', color: '#111827' },
+  filterBtnWrapper: {},
+  dropdownBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#BFDBFE' },
+  dropdownBtnText: { fontSize: 13, color: '#2563EB', marginHorizontal: 6, fontWeight: '600' },
   dropdownOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 },
   dropdownMenu: { position: 'absolute', right: 16, backgroundColor: '#fff', borderRadius: 12, padding: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8, width: 160 },
   dropdownItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 8 },
@@ -539,11 +503,14 @@ const styles = StyleSheet.create({
   pillAvatarTextOn: { color: '#fff' },
   pillText:    { fontSize: 12, fontWeight: '600', color: '#374151', maxWidth: 64 },
   pillTextOn:  { color: '#fff' },
-  legend:      { flexDirection: 'row', justifyContent: 'center', gap: 10, padding: 12 },
-  legendPill:  { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 99 },
-  legendText:  { fontSize: 12, fontWeight: '500' },
-  calendar:    { marginHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB' },
   summaryCard: { margin: 12, backgroundColor: '#fff', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  periodBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginBottom: 12, alignSelf: 'flex-start' },
+  periodBadgeText: { fontSize: 12, color: '#2563EB', marginLeft: 6, fontWeight: '500' },
+  staffInfoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 12 },
+  staffAvatarSm: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center' },
+  staffAvatarSmText: { fontSize: 18, fontWeight: '700', color: '#1D4ED8' },
+  staffInfoName: { fontSize: 16, fontWeight: '600', color: '#111827' },
+  staffInfoPos: { fontSize: 13, color: '#6B7280', marginTop: 2 },
   statsRow:    { flexDirection: 'row', gap: 10, marginBottom: 16 },
   statBox:     { flex: 1, borderRadius: 12, padding: 14, alignItems: 'center' },
   statVal:     { fontSize: 24, fontWeight: '700' },
@@ -559,32 +526,7 @@ const styles = StyleSheet.create({
   shareBtnText:{ color: '#fff', fontWeight: '600', fontSize: 15, marginLeft: 8 },
   empty:       { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText:   { fontSize: 14, color: '#9CA3AF' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', padding: 0 },
   modalTitle:   { fontSize: 18, fontWeight: '600', color: '#111827' },
-  calendarModal: { 
-    backgroundColor: '#fff', 
-    borderRadius: 20, 
-    width: '90%',
-    maxWidth: 360,
-    alignSelf: 'center',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  calendarHeader: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  calendarTitle: { fontSize: 16, fontWeight: '600', color: '#0F172A' },
-  closeBtn: { padding: 4 },
-  calendarInner: { borderRadius: 20 },
   modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   actionPopup: { backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '85%', maxWidth: 320 },
   actionTitle: { fontSize: 18, fontWeight: '700', color: '#111827', textAlign: 'center', marginBottom: 4 },
