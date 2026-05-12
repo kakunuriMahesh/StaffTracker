@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -14,9 +14,10 @@ import { addPlanChangeListener } from '../services/planService';
 import { showLockedAlert } from '../utils/upgradeHelper';
 
 const FILTER_TYPES = [
+  { key: 'all', label: 'All' },
   { key: 'monthly', label: 'Monthly' },
   { key: 'weekly', label: 'Weekly' },
-  { key: 'custom', label: 'Custom' },
+  { key: 'daily', label: 'Daily' },
 ];
 
 export default function MonthlyScreen() {
@@ -27,10 +28,10 @@ export default function MonthlyScreen() {
   const [selected, setSelected] = useState(null);
   const [attendance, setAttendance] = useState([]);
   const [summary, setSummary] = useState(null);
-  const [filterType, setFilterType] = useState('monthly');
+  const [filterType, setFilterType] = useState('all');
+  const [showDropdown, setShowDropdown] = useState(false);
   const [customStart, setCustomStart] = useState(now.startOf('month').format('YYYY-MM-DD'));
   const [customEnd, setCustomEnd] = useState(now.endOf('month').format('YYYY-MM-DD'));
-  const [showFilterModal, setShowFilterModal] = useState(false);
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [datePickerMode, setDatePickerMode] = useState('start');
   const [showActionPopup, setShowActionPopup] = useState(false);
@@ -38,6 +39,12 @@ export default function MonthlyScreen() {
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [existingNote, setExistingNote] = useState('');
+  const [reloadCounter, setReloadCounter] = useState(0);
+
+  const filteredStaff = useMemo(() => {
+    if (filterType === 'all') return staff;
+    return staff.filter(s => (s.salary_type || 'monthly') === filterType);
+  }, [staff, filterType]);
 
   useEffect(() => {
     const handlePlanChange = () => {
@@ -78,7 +85,12 @@ export default function MonthlyScreen() {
     let startDate, endDate;
     const staffSalaryType = selected.salary_type || 'monthly';
     
-    if (filterType === 'monthly') {
+    if (filterType === 'all') {
+      startDate = '2000-01-01';
+      endDate = '2099-12-31';
+      att = await getAttendanceByDateRange(selected.id, startDate, endDate);
+      advances = await getAdvancesByDateRange(selected.id, startDate, endDate);
+    } else if (filterType === 'monthly') {
       startDate = current.startOf('month').format('YYYY-MM-DD');
       endDate = current.endOf('month').format('YYYY-MM-DD');
       att = await getAttendanceByStaffAndMonth(selected.id, current.year(), current.month() + 1);
@@ -89,8 +101,8 @@ export default function MonthlyScreen() {
       att = await getAttendanceByDateRange(selected.id, startDate, endDate);
       advances = await getAdvancesByDateRange(selected.id, startDate, endDate);
     } else {
-      startDate = customStart;
-      endDate = customEnd;
+      startDate = current.format('YYYY-MM-DD');
+      endDate = current.format('YYYY-MM-DD');
       att = await getAttendanceByDateRange(selected.id, startDate, endDate);
       advances = await getAdvancesByDateRange(selected.id, startDate, endDate);
     }
@@ -136,31 +148,34 @@ export default function MonthlyScreen() {
       startDate,
       endDate,
     });
-  }, [selected, filterType, customStart, customEnd]);
+  }, [selected, filterType]);
 
   useFocusEffect(
     useCallback(() => {
-      loadStaffList();
+      (async () => {
+        await loadStaffList();
+        setReloadCounter(c => c + 1);
+      })();
     }, [])
   );
 
   React.useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (selected && !filteredStaff.find(s => s.id === selected.id)) {
+      setSelected(filteredStaff[0] || null);
+    }
+  }, [filteredStaff]);
+
+  React.useEffect(() => {
+    if (selected) loadData();
+  }, [loadData, reloadCounter]);
 
   const handleSelectStaff = (s) => {
     setSelected(s);
   };
 
-  const handleFilterChange = (type) => {
+  const selectPeriod = (type) => {
     setFilterType(type);
-    if (type === 'monthly') {
-      setCustomStart(now.startOf('month').format('YYYY-MM-DD'));
-      setCustomEnd(now.endOf('month').format('YYYY-MM-DD'));
-    } else if (type === 'weekly') {
-      setCustomStart(now.startOf('week').format('YYYY-MM-DD'));
-      setCustomEnd(now.endOf('week').format('YYYY-MM-DD'));
-    }
+    setShowDropdown(false);
   };
 
   const openDatePicker = (mode) => {
@@ -282,19 +297,20 @@ export default function MonthlyScreen() {
   };
 
   const getFilterLabel = () => {
-    if (filterType === 'monthly') return now.format('MMMM YYYY');
-    if (filterType === 'weekly') return `Week: ${now.startOf('week').format('DD MMM')} - ${now.endOf('week').format('DD MMM')}`;
-    return `${dayjs(customStart).format('DD MMM')} - ${dayjs(customEnd).format('DD MMM YYYY')}`;
+    const found = FILTER_TYPES.find(t => t.key === filterType);
+    return found ? found.label : 'All';
   };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.filterBtn} onPress={() => setShowFilterModal(true)}>
-          <Ionicons name="filter" size={16} color="#2563EB" />
-          <Text style={styles.filterBtnText}>{getFilterLabel()}</Text>
-          <Ionicons name="chevron-down" size={16} color="#2563EB" />
-        </TouchableOpacity>
+        <View style={styles.dropdownContainer}>
+          <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowDropdown(!showDropdown)}>
+            <Ionicons name="calendar" size={16} color="#2563EB" />
+            <Text style={styles.dropdownBtnText}>{getFilterLabel()}</Text>
+            <Ionicons name={showDropdown ? 'chevron-up' : 'chevron-down'} size={16} color="#2563EB" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.pillRowContainer}>
@@ -303,7 +319,7 @@ export default function MonthlyScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.pillRowContent}
         >
-          {staff.map(s => (
+          {filteredStaff.map(s => (
             <TouchableOpacity
               key={s.id}
               onPress={() => handleSelectStaff(s)}
@@ -329,13 +345,13 @@ export default function MonthlyScreen() {
 
       {selected && (
         <>
-          <View style={styles.legend}>
+          {/* <View style={styles.legend}>
             {[['#D1FAE5','#065F46','Present'],['#FEE2E2','#991B1B','Absent'],['#FEF3C7','#92400E','Leave']].map(([bg,fg,l]) => (
               <View key={l} style={[styles.legendPill,{backgroundColor:bg}]}>
                 <Text style={[styles.legendText,{color:fg}]}>{l}</Text>
               </View>
             ))}
-          </View>
+          </View> */}
           {/* <Calendar markedDates={markedDates} style={styles.calendar}
             current={now.format('YYYY-MM-DD')}
             onDayPress={(day) => openActionPopup(day.dateString)}
@@ -371,75 +387,32 @@ export default function MonthlyScreen() {
           )}
         </>
       )}
-      {staff.length === 0 && (
+      {filteredStaff.length === 0 && (
         <View style={styles.empty}><Text style={styles.emptyText}>Add staff first from the Staff tab.</Text></View>
       )}
 
-      <Modal visible={showFilterModal} transparent animationType="fade">
-        <Pressable style={styles.modalOverlay} onPress={() => setShowFilterModal(false)}>
-          <View style={styles.modalBox}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Period</Text>
-              <TouchableOpacity onPress={() => setShowFilterModal(false)}>
-                <Ionicons name="close" size={24} color="#6B7280" />
+      {showDropdown && (
+        <Pressable style={styles.dropdownOverlay} onPress={() => setShowDropdown(false)}>
+          <View style={[styles.dropdownMenu, { top: (insets.top || 40) + 52 }]}>
+            {FILTER_TYPES.map(type => (
+              <TouchableOpacity
+                key={type.key}
+                style={[styles.dropdownItem, filterType === type.key && styles.dropdownItemActive]}
+                onPress={() => selectPeriod(type.key)}
+              >
+                <Ionicons
+                  name={filterType === type.key ? 'radio-button-on' : 'ellipse-outline'}
+                  size={18}
+                  color={filterType === type.key ? '#2563EB' : '#6B7280'}
+                />
+                <Text style={[styles.dropdownItemText, filterType === type.key && styles.dropdownItemTextActive]}>
+                  {type.label}
+                </Text>
               </TouchableOpacity>
-            </View>
-            
-            <View style={styles.filterOptions}>
-              {FILTER_TYPES.map(type => (
-                <TouchableOpacity
-                  key={type.key}
-                  onPress={() => handleFilterChange(type.key)}
-                  style={[styles.filterOption, filterType === type.key && styles.filterOptionActive]}
-                >
-                  <Ionicons 
-                    name={filterType === type.key ? 'radio-button-on' : 'ellipse-outline'} 
-                    size={20} 
-                    color={filterType === type.key ? '#2563EB' : '#6B7280'} 
-                  />
-                  <Text style={[styles.filterOptionText, filterType === type.key && styles.filterOptionTextActive]}>
-                    {type.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {filterType === 'custom' && (
-              <View style={styles.dateInputs}>
-                <View style={styles.dateField}>
-                  <Text style={styles.dateLabel}>Start Date</Text>
-                  <TouchableOpacity 
-                    style={styles.datePickerBtn}
-                    onPress={() => openDatePicker('start')}
-                  >
-                    <Ionicons name="calendar" size={18} color="#6B7280" />
-                    <Text style={styles.dateText}>
-                      {dayjs(customStart).format('DD MMM YYYY')}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.dateField}>
-                  <Text style={styles.dateLabel}>End Date</Text>
-                  <TouchableOpacity 
-                    style={styles.datePickerBtn}
-                    onPress={() => openDatePicker('end')}
-                  >
-                    <Ionicons name="calendar" size={18} color="#6B7280" />
-                    <Text style={styles.dateText}>
-                      {dayjs(customEnd).format('DD MMM YYYY')}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-
-            <TouchableOpacity style={styles.modalApplyBtn} onPress={() => { loadData(); setShowFilterModal(false); }}>
-              <Ionicons name="checkmark" size={18} color="#fff" />
-              <Text style={styles.modalApplyText}>Apply Filter</Text>
-            </TouchableOpacity>
+            ))}
           </View>
         </Pressable>
-      </Modal>
+      )}
 
       <Modal visible={showCalendarPicker} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setShowCalendarPicker(false)}>
@@ -546,9 +519,16 @@ export default function MonthlyScreen() {
 
 const styles = StyleSheet.create({
   container:   { flex: 1, backgroundColor: '#F3F4F6' },
-  header:      { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  filterBtn:   { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderWidth: 1, borderColor: '#BFDBFE' },
-  filterBtnText: { fontSize: 14, color: '#2563EB', marginHorizontal: 8, fontWeight: '600' },
+  header:      { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  dropdownContainer: {},
+  dropdownBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderWidth: 1, borderColor: '#BFDBFE' },
+  dropdownBtnText: { fontSize: 14, color: '#2563EB', marginHorizontal: 8, fontWeight: '600' },
+  dropdownOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 },
+  dropdownMenu: { position: 'absolute', right: 16, backgroundColor: '#fff', borderRadius: 12, padding: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8, width: 160 },
+  dropdownItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 8 },
+  dropdownItemActive: { backgroundColor: '#EFF6FF' },
+  dropdownItemText: { fontSize: 14, color: '#374151', marginLeft: 10 },
+  dropdownItemTextActive: { color: '#2563EB', fontWeight: '600' },
   pillRowContainer: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', height: 86, justifyContent: 'center' },
   pillRowContent: { paddingHorizontal: 16, alignItems: 'center', gap: 10 },
   pill:        { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 14, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB', minWidth: 66 },
@@ -580,30 +560,7 @@ const styles = StyleSheet.create({
   empty:       { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText:   { fontSize: 14, color: '#9CA3AF' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', padding: 0 },
-  modalBox:     { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
-  modalHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   modalTitle:   { fontSize: 18, fontWeight: '600', color: '#111827' },
-  filterOptions:{ marginBottom: 20 },
-  filterOption:{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, backgroundColor: '#F9FAFB', marginBottom: 8 },
-  filterOptionActive:{ backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#2563EB' },
-  filterOptionText:{ fontSize: 15, color: '#6B7280', marginLeft: 12 },
-  filterOptionTextActive:{ color: '#2563EB', fontWeight: '500' },
-  dateInputs:  { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  dateField:   { flex: 1 },
-  dateLabel:   { fontSize: 12, fontWeight: '600', color: '#64748B', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
-  datePickerBtn: {
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: '#F8FAFC', 
-    borderWidth: 1.5, 
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  dateText: { fontSize: 14, color: '#1E293B', marginLeft: 10 },
-  modalApplyBtn:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2563EB', padding: 14, borderRadius: 12 },
-  modalApplyText:{ color: '#fff', fontSize: 15, fontWeight: '600', marginLeft: 8 },
   calendarModal: { 
     backgroundColor: '#fff', 
     borderRadius: 20, 
