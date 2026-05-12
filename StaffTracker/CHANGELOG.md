@@ -1,5 +1,54 @@
 # Changelog
 
+## 📋 Bill Screen Overhaul + Period Navigation + Offline-First Sync (v3 - Latest)
+
+### Overview
+Major rework of the Bill (Monthly) screen with period navigation, salary-type-based staff filtering, and a cleaner summary card. Fixed data persistence race condition where sync on startup would overwrite local edits.
+
+### Key Changes
+
+#### 1. Bill Screen — Period Navigation
+- Added `< May 2026 >` arrows to navigate between months, weeks, or days
+- Selector dropdown (top-right) switches between **All**, **Monthly**, **Weekly**, **Daily** views
+- "All" period uses staff `join_date` → today for meaningful totals
+
+#### 2. Staff Filtered by Salary Type
+- Staff pills now filter based on selected period:
+  - **Monthly** → shows only monthly-paid staff (default)
+  - **Weekly** → shows only weekly-paid staff
+  - **Daily** → shows only daily-paid staff
+  - **All** → shows all staff
+- Auto-selects first matching staff when filter changes
+
+#### 3. Enhanced Summary Card
+- **Period badge** with exact date range (e.g. "01 May 2026 — 31 May 2026")
+- **Staff info row** with avatar, name, and position
+- **Base salary** row showing rate (₹X/month, ₹X/week, or ₹X/day)
+- **Paid days** row showing attendance count / total days
+- **Gross salary**, **Advances deducted**, **Net payable** breakdown
+
+#### 4. Offline-First Sync Fix
+- **Root Cause**: `syncManager.js` downloaded Drive backup and replaced local data via `importFromDB('replace')`
+- **Fix**: Removed timestamp-comparison replace block; sync now uses `importFromDB('merge')` where dirty-local records always win
+- Added dirty-flag tracking (`sync_status`) on all CRUD operations in `db.js`
+- New helpers: `getDirtyRecords()`, `hasDirtyRecords()`, `clearSyncStatus()`
+- `importFromJSON('merge')` skips overwriting dirty local records
+
+#### 5. Cleanup
+- Removed dead calendar picker modal and unused date-picker code
+- Removed unused `getCalendarTheme()`, `markedDates`, `customStart/customEnd` states
+- Removed `expo-print` / `expo-sharing` related dead references
+- Removed obsolete filter modal with "Apply" button — replaced by inline dropdown
+
+### Files Changed
+- `StaffTracker/src/screens/MonthlyScreen.js` — Major overhaul
+- `StaffTracker/src/database/db.js` — Dirty-flag tracking, merge mode
+- `StaffTracker/src/services/syncManager.js` — Offline-first sync flow
+- `StaffTracker/src/storage/localStorage.js` — Sync queue functions
+- `StaffTracker/App.js` — Tab label "Bill" with receipt icon
+
+---
+
 ## 🍏 Plan Expiry + Staff Locking System (v2 - Latest)
 
 ### Overview
