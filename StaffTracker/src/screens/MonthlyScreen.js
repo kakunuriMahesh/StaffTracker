@@ -80,8 +80,8 @@ export default function MonthlyScreen() {
     const staffSalaryType = selected.salary_type || 'monthly';
     
     if (filterType === 'all') {
-      startDate = '2000-01-01';
-      endDate = '2099-12-31';
+      startDate = selected.join_date || '2000-01-01';
+      endDate = dayjs().format('YYYY-MM-DD');
       att = await getAttendanceByDateRange(selected.id, startDate, endDate);
       advances = await getAdvancesByDateRange(selected.id, startDate, endDate);
     } else if (filterType === 'monthly') {
@@ -333,7 +333,7 @@ export default function MonthlyScreen() {
               <View style={styles.periodBadge}>
                 <Ionicons name="calendar-outline" size={14} color="#2563EB" />
                 <Text style={styles.periodBadgeText}>
-                  {filterType === 'all' ? 'All time' : `${dayjs(summary.startDate).format('DD MMM YYYY')} — ${dayjs(summary.endDate).format('DD MMM YYYY')}`}
+                  {`${dayjs(summary.startDate).format('DD MMM YYYY')} — ${dayjs(summary.endDate).format('DD MMM YYYY')}`}
                 </Text>
               </View>
               <View style={styles.staffInfoRow}>
