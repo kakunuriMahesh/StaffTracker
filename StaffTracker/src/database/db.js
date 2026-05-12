@@ -1,6 +1,13 @@
 import { loadStaff, saveStaff, loadAttendance, saveAttendance, loadAdvances, saveAdvances } from '../storage/localStorage';
 import { getUserPlan } from '../services/planService';
 
+const SYNC_STATUS = {
+  SYNCED: 'synced',
+  PENDING_CREATE: 'pending_create',
+  PENDING_UPDATE: 'pending_update',
+  PENDING_DELETE: 'pending_delete',
+};
+
 let staffCache = null;
 let attendanceCache = null;
 let advancesCache = null;
@@ -21,6 +28,7 @@ export async function initDatabase() {
     
     staffCache = (rawStaff || []).map(s => ({
       ...s,
+      sync_status: s.sync_status || SYNC_STATUS.SYNCED,
       is_deleted: s.is_deleted || 0,
       is_archived: s.is_archived || 0,
       archived_at: s.archived_at || null,
@@ -28,11 +36,13 @@ export async function initDatabase() {
     }));
     attendanceCache = (rawAttendance || []).map(a => ({
       ...a,
+      sync_status: a.sync_status || SYNC_STATUS.SYNCED,
       is_deleted: a.is_deleted || 0,
       deleted_at: a.deleted_at || null
     }));
     advancesCache = (rawAdvances || []).map(a => ({
       ...a,
+      sync_status: a.sync_status || SYNC_STATUS.SYNCED,
       is_deleted: a.is_deleted || 0,
       deleted_at: a.deleted_at || null
     }));
@@ -50,6 +60,31 @@ export async function initDatabase() {
     return true;
   }
 }
+
+export function getDirtyRecords() {
+  const dirtyStaff = (staffCache || []).filter(r => r.sync_status && r.sync_status !== SYNC_STATUS.SYNCED);
+  const dirtyAttendance = (attendanceCache || []).filter(r => r.sync_status && r.sync_status !== SYNC_STATUS.SYNCED);
+  const dirtyAdvances = (advancesCache || []).filter(r => r.sync_status && r.sync_status !== SYNC_STATUS.SYNCED);
+  return { staff: dirtyStaff, attendance: dirtyAttendance, advances: dirtyAdvances };
+}
+
+export function hasDirtyRecords() {
+  return (staffCache || []).some(r => r.sync_status && r.sync_status !== SYNC_STATUS.SYNCED)
+    || (attendanceCache || []).some(r => r.sync_status && r.sync_status !== SYNC_STATUS.SYNCED)
+    || (advancesCache || []).some(r => r.sync_status && r.sync_status !== SYNC_STATUS.SYNCED);
+}
+
+export async function clearSyncStatus() {
+  (staffCache || []).forEach(r => { r.sync_status = SYNC_STATUS.SYNCED; });
+  (attendanceCache || []).forEach(r => { r.sync_status = SYNC_STATUS.SYNCED; });
+  (advancesCache || []).forEach(r => { r.sync_status = SYNC_STATUS.SYNCED; });
+  await saveStaff(staffCache);
+  await saveAttendance(attendanceCache);
+  await saveAdvances(advancesCache);
+  console.log('[DB] Sync status cleared for all records');
+}
+
+export { SYNC_STATUS };
 
 async function ensureLoaded() {
   if (!isReady) {
@@ -80,7 +115,8 @@ export async function addStaff(name, position, salary, phone, joinDate, salaryTy
     note: note || '',
     is_deleted: 0,
     deleted_at: null,
-    updated_at: now
+    updated_at: now,
+    sync_status: SYNC_STATUS.PENDING_CREATE
   };
   
   staffCache.push(newStaff);
@@ -133,7 +169,8 @@ export async function updateStaff(id, name, position, salary, phone, salaryType,
       salary_end_date: salaryEndDate,
       sunday_holiday: sundayHoliday ? 1 : 0,
       note: note || '',
-      updated_at: now
+      updated_at: now,
+      sync_status: SYNC_STATUS.PENDING_UPDATE
     };
     await saveStaff(staffCache);
     console.log('[DB] Staff updated:', id);
@@ -148,6 +185,7 @@ export async function deleteStaff(id) {
     const now = new Date().toISOString();
     staffCache[index].is_deleted = 1;
     staffCache[index].deleted_at = now;
+    staffCache[index].sync_status = SYNC_STATUS.PENDING_DELETE;
     
     const staffId = id;
     attendanceCache = attendanceCache.map(a => {
@@ -179,6 +217,7 @@ export async function archiveStaff(id, skipSave = false) {
     const now = new Date().toISOString();
     staffCache[index].is_archived = 1;
     staffCache[index].archived_at = now;
+    staffCache[index].sync_status = SYNC_STATUS.PENDING_UPDATE;
     
     if (!skipSave) {
       attendanceCache = attendanceCache.map(a => {
@@ -215,6 +254,7 @@ export async function unarchiveStaff(id) {
   if (index !== -1) {
     staffCache[index].is_archived = 0;
     staffCache[index].archived_at = null;
+    staffCache[index].sync_status = SYNC_STATUS.PENDING_UPDATE;
     delete staffCache[index]._pendingSave;
     
     await saveStaff(staffCache);
@@ -262,6 +302,7 @@ export async function markAttendance(staffId, date, status, note) {
     attendanceCache[existingIndex].status = status;
     attendanceCache[existingIndex].note = note || '';
     attendanceCache[existingIndex].updated_at = now;
+    attendanceCache[existingIndex].sync_status = SYNC_STATUS.PENDING_UPDATE;
   } else {
     const maxId = attendanceCache.length > 0 ? Math.max(...attendanceCache.map(a => a.id)) : 0;
     attendanceCache.push({
@@ -272,7 +313,8 @@ export async function markAttendance(staffId, date, status, note) {
       note: note || '',
       is_deleted: 0,
       deleted_at: null,
-      updated_at: now
+      updated_at: now,
+      sync_status: SYNC_STATUS.PENDING_CREATE
     });
   }
   
@@ -350,7 +392,8 @@ export async function addAdvance(staffId, amount, date, note) {
     note: note || '',
     is_deleted: 0,
     deleted_at: null,
-    updated_at: now
+    updated_at: now,
+    sync_status: SYNC_STATUS.PENDING_CREATE
   };
   
   advancesCache.push(newAdvance);
@@ -366,6 +409,7 @@ export async function deleteAdvance(id) {
     const now = new Date().toISOString();
     advancesCache[index].is_deleted = 1;
     advancesCache[index].deleted_at = now;
+    advancesCache[index].sync_status = SYNC_STATUS.PENDING_DELETE;
     await saveAdvances(advancesCache);
     console.log('[DB] Advance soft deleted:', id);
   }
@@ -381,6 +425,7 @@ export async function updateAdvance(id, amount, date, note) {
     advancesCache[index].date = date;
     advancesCache[index].note = note || '';
     advancesCache[index].updated_at = now;
+    advancesCache[index].sync_status = SYNC_STATUS.PENDING_UPDATE;
     await saveAdvances(advancesCache);
     console.log('[DB] Advance updated:', id);
   }
@@ -465,7 +510,8 @@ export const exportToJSON = async (googleId = null) => {
       note: s.note || '',
       isDeleted: false,
       deletedAt: null,
-      updatedAt: s.updated_at
+      updatedAt: s.updated_at,
+      syncStatus: s.sync_status || 'synced'
     })),
     deletedStaff: staffCache.filter(s => s.is_deleted).map(s => ({
       id: s.id,
@@ -490,7 +536,8 @@ export const exportToJSON = async (googleId = null) => {
       note: s.note || '',
       isArchived: true,
       archivedAt: s.archived_at,
-      updatedAt: s.updated_at
+      updatedAt: s.updated_at,
+      syncStatus: s.sync_status || 'synced'
     })),
     attendance: activeAttendance.map(a => ({
       id: a.id,
@@ -500,7 +547,8 @@ export const exportToJSON = async (googleId = null) => {
       status: a.status,
       note: a.note || '',
       isDeleted: false,
-      deletedAt: null
+      deletedAt: null,
+      syncStatus: a.sync_status || 'synced'
     })),
     deletedAttendance: attendanceCache.filter(a => a.is_deleted).map(a => ({
       id: a.id,
@@ -518,7 +566,8 @@ export const exportToJSON = async (googleId = null) => {
       note: a.note || '',
       type: 'advance',
       isDeleted: false,
-      deletedAt: null
+      deletedAt: null,
+      syncStatus: a.sync_status || 'synced'
     })),
     deletedPayments: advancesCache.filter(a => a.is_deleted).map(a => ({
       id: a.id,
@@ -574,7 +623,8 @@ export const importFromJSON = async (jsonString, mergeMode = 'replace', targetGo
         note: s.note || '',
         is_deleted: s.isDeleted ? 1 : 0,
         deleted_at: s.deletedAt || null,
-        updated_at: s.updatedAt || now
+        updated_at: s.updatedAt || now,
+        sync_status: s.syncStatus || SYNC_STATUS.SYNCED
       }));
     }
     
@@ -586,7 +636,8 @@ export const importFromJSON = async (jsonString, mergeMode = 'replace', targetGo
         phone: s.phone,
         is_deleted: 1,
         deleted_at: s.deletedAt || now,
-        updated_at: now
+        updated_at: now,
+        sync_status: SYNC_STATUS.SYNCED
       }));
       staffCache = [...staffCache, ...deletedStaff];
     }
@@ -608,7 +659,8 @@ export const importFromJSON = async (jsonString, mergeMode = 'replace', targetGo
         is_archived: 1,
         archived_at: s.archivedAt || now,
         deleted_at: null,
-        updated_at: s.updatedAt || now
+        updated_at: s.updatedAt || now,
+        sync_status: s.syncStatus || SYNC_STATUS.SYNCED
       }));
       staffCache = [...staffCache, ...archived];
     }
@@ -622,7 +674,8 @@ export const importFromJSON = async (jsonString, mergeMode = 'replace', targetGo
         note: a.note || '',
         is_deleted: a.isDeleted ? 1 : 0,
         deleted_at: a.deletedAt || null,
-        updated_at: now
+        updated_at: now,
+        sync_status: a.syncStatus || SYNC_STATUS.SYNCED
       }));
     }
     
@@ -649,7 +702,8 @@ export const importFromJSON = async (jsonString, mergeMode = 'replace', targetGo
         note: a.note || '',
         is_deleted: a.isDeleted ? 1 : 0,
         deleted_at: a.deletedAt || null,
-        updated_at: now
+        updated_at: now,
+        sync_status: a.syncStatus || SYNC_STATUS.SYNCED
       }));
     }
     
@@ -678,6 +732,9 @@ export const importFromJSON = async (jsonString, mergeMode = 'replace', targetGo
   if (mergeMode === 'merge') {
     console.log('[DB] Starting merge operation...');
     
+    // Helper: check if a record has unsynced local changes
+    const isDirty = (record) => record && record.sync_status && record.sync_status !== SYNC_STATUS.SYNCED;
+    
     const existingStaffMap = new Map();
     staffCache.forEach(s => {
       existingStaffMap.set(s.id, s);
@@ -698,6 +755,7 @@ export const importFromJSON = async (jsonString, mergeMode = 'replace', targetGo
         const localStaff = existingStaffMap.get(remoteStaff.id);
         
         if (!localStaff) {
+          // New record from remote — add it locally
           staffCache.push({
             id: remoteStaff.id,
             name: remoteStaff.name,
@@ -712,14 +770,16 @@ export const importFromJSON = async (jsonString, mergeMode = 'replace', targetGo
             note: remoteStaff.note || '',
             is_deleted: 0,
             deleted_at: null,
-            updated_at: remoteStaff.updatedAt || now
+            updated_at: remoteStaff.updatedAt || now,
+            sync_status: SYNC_STATUS.SYNCED
           });
           console.log('[DB] Merge: Added new staff:', remoteStaff.name);
-        } else {
+        } else if (!isDirty(localStaff)) {
+          // Local is clean — update from remote if newer
           const localUpdated = new Date(localStaff.updated_at || 0);
           const remoteUpdated = new Date(remoteStaff.updatedAt || 0);
           
-          if (remoteUpdated > localUpdated) {
+          if (remoteUpdated >= localUpdated) {
             const index = staffCache.findIndex(s => s.id === remoteStaff.id);
             staffCache[index] = {
               ...staffCache[index],
@@ -731,52 +791,65 @@ export const importFromJSON = async (jsonString, mergeMode = 'replace', targetGo
               join_date: remoteStaff.joinDate,
               sunday_holiday: remoteStaff.sundayHoliday ? 1 : 0,
               note: remoteStaff.note || '',
-              updated_at: remoteStaff.updatedAt || now
+              updated_at: remoteStaff.updatedAt || now,
+              sync_status: SYNC_STATUS.SYNCED
             };
             console.log('[DB] Merge: Updated staff (newer):', remoteStaff.name);
           }
+        } else {
+          console.log('[DB] Merge: Preserved dirty local staff:', localStaff.name);
         }
       }
     }
     
     if (data.deletedStaff && data.deletedStaff.length > 0) {
-      for (const deletedStaff of data.deletedStaff) {
-        const existingIndex = staffCache.findIndex(s => s.id === deletedStaff.id);
-        if (existingIndex >= 0) {
+      for (const remoteDeleted of data.deletedStaff) {
+        const existingIndex = staffCache.findIndex(s => s.id === remoteDeleted.id);
+        if (existingIndex >= 0 && !isDirty(staffCache[existingIndex])) {
           staffCache[existingIndex].is_deleted = 1;
-          staffCache[existingIndex].deleted_at = deletedStaff.deletedAt || now;
-          console.log('[DB] Merge: Marked staff as deleted:', deletedStaff.name);
+          staffCache[existingIndex].deleted_at = remoteDeleted.deletedAt || now;
+          staffCache[existingIndex].sync_status = SYNC_STATUS.SYNCED;
+          console.log('[DB] Merge: Marked clean staff as deleted:', remoteDeleted.name);
+        } else if (existingIndex >= 0) {
+          console.log('[DB] Merge: Skipped remote delete for dirty staff');
         }
       }
     }
     
     if (data.archivedStaff && data.archivedStaff.length > 0) {
-      for (const archived of data.archivedStaff) {
-        const existingIndex = staffCache.findIndex(s => s.id === archived.id);
+      for (const remoteArchived of data.archivedStaff) {
+        const existingIndex = staffCache.findIndex(s => s.id === remoteArchived.id);
         if (existingIndex >= 0) {
-          staffCache[existingIndex].is_archived = 1;
-          staffCache[existingIndex].archived_at = archived.archivedAt || now;
-          console.log('[DB] Merge: Marked staff as archived:', archived.name);
+          if (!isDirty(staffCache[existingIndex])) {
+            staffCache[existingIndex].is_archived = 1;
+            staffCache[existingIndex].archived_at = remoteArchived.archivedAt || now;
+            staffCache[existingIndex].sync_status = SYNC_STATUS.SYNCED;
+            console.log('[DB] Merge: Archived clean staff:', remoteArchived.name);
+          } else {
+            console.log('[DB] Merge: Skipped remote archive for dirty staff');
+          }
         } else {
+          // Add archived staff from remote that doesn't exist locally
           staffCache.push({
-            id: archived.id,
-            name: archived.name,
-            position: archived.position,
-            salary: archived.salary,
-            salary_type: archived.salaryType || 'monthly',
-            salary_start_date: archived.salaryStartDate,
-            salary_end_date: archived.salaryEndDate,
-            phone: archived.phone,
-            join_date: archived.joinDate,
-            sunday_holiday: archived.sundayHoliday ? 1 : 0,
-            note: archived.note || '',
+            id: remoteArchived.id,
+            name: remoteArchived.name,
+            position: remoteArchived.position,
+            salary: remoteArchived.salary,
+            salary_type: remoteArchived.salaryType || 'monthly',
+            salary_start_date: remoteArchived.salaryStartDate,
+            salary_end_date: remoteArchived.salaryEndDate,
+            phone: remoteArchived.phone,
+            join_date: remoteArchived.joinDate,
+            sunday_holiday: remoteArchived.sundayHoliday ? 1 : 0,
+            note: remoteArchived.note || '',
             is_deleted: 0,
             is_archived: 1,
-            archived_at: archived.archivedAt || now,
+            archived_at: remoteArchived.archivedAt || now,
             deleted_at: null,
-            updated_at: archived.updatedAt || now
+            updated_at: remoteArchived.updatedAt || now,
+            sync_status: SYNC_STATUS.SYNCED
           });
-          console.log('[DB] Merge: Added archived staff:', archived.name);
+          console.log('[DB] Merge: Added archived staff from remote:', remoteArchived.name);
         }
       }
     }
@@ -795,19 +868,31 @@ export const importFromJSON = async (jsonString, mergeMode = 'replace', targetGo
             note: remoteAtt.note || '',
             is_deleted: 0,
             deleted_at: null,
-            updated_at: now
+            updated_at: now,
+            sync_status: SYNC_STATUS.SYNCED
           });
+        } else if (!isDirty(localAtt)) {
+          // Update existing clean attendance from remote
+          const index = attendanceCache.indexOf(localAtt);
+          if (index >= 0) {
+            attendanceCache[index].status = remoteAtt.status;
+            attendanceCache[index].note = remoteAtt.note || '';
+            attendanceCache[index].updated_at = now;
+            attendanceCache[index].sync_status = SYNC_STATUS.SYNCED;
+          }
         }
       }
     }
     
     if (data.deletedAttendance && data.deletedAttendance.length > 0) {
-      for (const deletedAtt of data.deletedAttendance) {
-        const key = `${deletedAtt.staffId}_${deletedAtt.date}`;
-        const existingIndex = attendanceCache.findIndex(a => a.staff_id === deletedAtt.staffId && a.date === deletedAtt.date);
-        if (existingIndex >= 0) {
+      for (const remoteDeleted of data.deletedAttendance) {
+        const existingIndex = attendanceCache.findIndex(
+          a => a.staff_id === remoteDeleted.staffId && a.date === remoteDeleted.date
+        );
+        if (existingIndex >= 0 && !isDirty(attendanceCache[existingIndex])) {
           attendanceCache[existingIndex].is_deleted = 1;
-          attendanceCache[existingIndex].deleted_at = deletedAtt.deletedAt || now;
+          attendanceCache[existingIndex].deleted_at = remoteDeleted.deletedAt || now;
+          attendanceCache[existingIndex].sync_status = SYNC_STATUS.SYNCED;
         }
       }
     }
@@ -826,18 +911,29 @@ export const importFromJSON = async (jsonString, mergeMode = 'replace', targetGo
             note: remoteAdv.note || '',
             is_deleted: 0,
             deleted_at: null,
-            updated_at: now
+            updated_at: now,
+            sync_status: SYNC_STATUS.SYNCED
           });
+        } else if (!isDirty(localAdv)) {
+          const index = advancesCache.indexOf(localAdv);
+          if (index >= 0) {
+            advancesCache[index].amount = remoteAdv.amount;
+            advancesCache[index].date = remoteAdv.date;
+            advancesCache[index].note = remoteAdv.note || '';
+            advancesCache[index].updated_at = now;
+            advancesCache[index].sync_status = SYNC_STATUS.SYNCED;
+          }
         }
       }
     }
     
     if (data.deletedPayments && data.deletedPayments.length > 0) {
-      for (const deletedPay of data.deletedPayments) {
-        const existingIndex = advancesCache.findIndex(a => a.id === deletedPay.id);
-        if (existingIndex >= 0) {
+      for (const remoteDeleted of data.deletedPayments) {
+        const existingIndex = advancesCache.findIndex(a => a.id === remoteDeleted.id);
+        if (existingIndex >= 0 && !isDirty(advancesCache[existingIndex])) {
           advancesCache[existingIndex].is_deleted = 1;
-          advancesCache[existingIndex].deleted_at = deletedPay.deletedAt || now;
+          advancesCache[existingIndex].deleted_at = remoteDeleted.deletedAt || now;
+          advancesCache[existingIndex].sync_status = SYNC_STATUS.SYNCED;
         }
       }
     }

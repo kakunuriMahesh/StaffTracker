@@ -53,12 +53,22 @@ export async function saveAdvances(advancesList) {
   return await writeJSONFile(getFileUri('advances_data.json'), advancesList);
 }
 
+export async function loadSyncQueue() {
+  const data = await readJSONFile(getFileUri('sync_queue.json'));
+  return data || [];
+}
+
+export async function saveSyncQueue(queue) {
+  return await writeJSONFile(getFileUri('sync_queue.json'), queue);
+}
+
 export async function clearAllData() {
   try {
     const files = [
       getFileUri('staff_data.json'),
       getFileUri('attendance_data.json'),
-      getFileUri('advances_data.json')
+      getFileUri('advances_data.json'),
+      getFileUri('sync_queue.json')
     ];
     for (const f of files) {
       try {

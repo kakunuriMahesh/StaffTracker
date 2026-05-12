@@ -6,7 +6,7 @@ import {
   saveToLocalCache, 
   loadFromLocalCache
 } from './driveService';
-import { exportToJSON as exportFromDB, importFromJSON as importToDB } from '../database/db';
+import { exportToJSON as exportFromDB, importFromJSON as importToDB, clearSyncStatus } from '../database/db';
 import { initDatabase } from '../database/db';
 import { getCurrentUser } from '../database/userDb';
 import { Alert } from 'react-native';
@@ -352,36 +352,10 @@ export const syncData = async (forceUpload = false) => {
     
     let mergedData = localData;
     
-    if (remoteData && !forceUpload && !fileNotFound) {
-      try {
-        const localModified = new Date(JSON.parse(localData).metadata.lastModified);
-        const remoteModified = new Date(JSON.parse(remoteData).metadata.lastModified);
-        
-        if (remoteModified > localModified) {
-          mergedData = remoteData;
-          await importToDB(mergedData, 'replace', googleId);
-          try {
-            await saveToLocalCache(mergedData);
-          } catch (cacheError) {
-            console.log('[Sync] Cache update skipped:', cacheError.message);
-          }
-        }
-      } catch (parseError) {
-        console.log('[Sync] Parse error, using local:', parseError.message);
-      }
-    }
-    
     const staffCount = localParsed.metadata?.staffCount || 0;
     const attendanceCount = localParsed.metadata?.attendanceCount || 0;
     const paymentCount = localParsed.metadata?.paymentCount || 0;
     const remoteStaffCount = remoteData ? JSON.parse(remoteData).metadata?.staffCount || 0 : 0;
-    
-    console.log('[Sync] Sync decision:', {
-      localStaff: staffCount,
-      localAttendance: attendanceCount,
-      localPayments: paymentCount,
-      remoteStaff: remoteStaffCount
-    });
     
     const hasLocalData = staffCount > 0 || attendanceCount > 0 || paymentCount > 0;
     const hasRemoteData = remoteStaffCount > 0;
@@ -393,6 +367,15 @@ export const syncData = async (forceUpload = false) => {
       return { success: true, skipped: true, reason: 'no_data' };
     }
     
+    // Offline-first merge: if remote data exists, merge it with local data.
+    // The merge in importToDB respects dirty flags — local unsynced changes are never overwritten.
+    if (remoteData && hasLocalData && hasRemoteData && !forceUpload) {
+      console.log('[Sync] Merging remote data with local (dirty records preserved)...');
+      await importToDB(remoteData, 'merge', googleId);
+      // Re-export merged data for upload
+      mergedData = await exportFromDB(googleId);
+    }
+    
     if (hasLocalData) {
       console.log('[Sync] Uploading data to Drive, counts:', { staffCount, attendanceCount, paymentCount });
       const uploadResult = await uploadJSON(accessToken, mergedData, googleId);
@@ -402,11 +385,16 @@ export const syncData = async (forceUpload = false) => {
         if (accessToken) {
           await uploadJSON(accessToken, mergedData, googleId);
         }
+      } else {
+        // Upload succeeded — clear dirty flags so all records are marked synced
+        console.log('[Sync] Upload complete, clearing dirty status...');
+        await clearSyncStatus();
       }
     } else if (hasRemoteData && !forceUpload) {
       console.log('[Sync] Remote has data, local empty - auto restore');
       mergedData = remoteData;
       await importToDB(mergedData, 'replace', googleId);
+      await clearSyncStatus();
     }
     
     await setLastSyncTime();
@@ -459,7 +447,8 @@ export const loadRemoteData = async () => {
       return { success: true, data: null, isNew: false };
     }
     
-    await importToDB(remoteData, 'replace', googleId);
+    // Use merge mode to respect local dirty records instead of blindly replacing
+    await importToDB(remoteData, 'merge', googleId);
     await saveToLocalCache(remoteData, googleId);
     
     return { success: true, data: JSON.parse(remoteData), isNew: true };

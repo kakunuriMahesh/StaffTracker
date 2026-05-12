@@ -25,7 +25,7 @@
       "edgeToEdgeEnabled": false,
       "newArchEnabled": false,
       "package": "com.srcdesigns.stafftracker",
-      "versionCode": 2,
+      "versionCode": 4,
       "versionName": "1.0.0",
       "permissions": [
         "android.permission.INTERNET",
