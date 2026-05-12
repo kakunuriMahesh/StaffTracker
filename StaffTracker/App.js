@@ -61,7 +61,7 @@ function Tabs({ navigation }) {
           } else if (route.name === 'DailyTab') {
             iconName = focused ? 'today' : 'today-outline';
           } else if (route.name === 'MonthlyTab') {
-            iconName = focused ? 'calendar' : 'calendar-outline';
+            iconName = focused ? 'receipt' : 'receipt-outline';
           } else if (route.name === 'ProfileTab') {
             iconName = focused ? 'person' : 'person-outline';
           }
@@ -71,7 +71,7 @@ function Tabs({ navigation }) {
     >
       <Tab.Screen name="HomeTab"    component={HomeScreen}    options={{ tabBarLabel: 'Staff' }} />
       <Tab.Screen name="DailyTab"   component={DailyScreen}   options={{ tabBarLabel: 'Attendance' }} />
-      <Tab.Screen name="MonthlyTab" component={MonthlyScreen} options={{ tabBarLabel: 'Monthly' }} />
+      <Tab.Screen name="MonthlyTab" component={MonthlyScreen} options={{ tabBarLabel: 'Bill' }} />
       <Tab.Screen name="ProfileTab" component={ProfileScreen} options={{ tabBarLabel: 'Profile' }} />
     </Tab.Navigator>
   );

@@ -297,17 +297,35 @@ export default function MonthlyScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillRow} contentContainerStyle={{ paddingHorizontal: 16 }}>
-        {staff.map(s => (
-          <TouchableOpacity key={s.id} onPress={() => handleSelectStaff(s)}
-            style={[styles.pill, selected?.id === s.id && styles.pillOn]}>
-            <View style={[styles.pillAvatar, selected?.id === s.id && styles.pillAvatarOn]}>
-              <Text style={[styles.pillAvatarText, selected?.id === s.id && { color: '#fff' }]}>{s.name[0].toUpperCase()}</Text>
-            </View>
-            <Text style={[styles.pillText, selected?.id === s.id && { color: '#fff' }]}>{s.name}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <View style={styles.pillRowContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.pillRowContent}
+        >
+          {staff.map(s => (
+            <TouchableOpacity
+              key={s.id}
+              onPress={() => handleSelectStaff(s)}
+              style={[styles.pill, selected?.id === s.id && styles.pillOn]}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.pillAvatar, selected?.id === s.id && styles.pillAvatarOn]}>
+                <Text style={[styles.pillAvatarText, selected?.id === s.id && styles.pillAvatarTextOn]}>
+                  {s.name[0].toUpperCase()}
+                </Text>
+              </View>
+              <Text
+                style={[styles.pillText, selected?.id === s.id && styles.pillTextOn]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {s.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
       {selected && (
         <>
@@ -318,10 +336,10 @@ export default function MonthlyScreen() {
               </View>
             ))}
           </View>
-          <Calendar markedDates={markedDates} style={styles.calendar}
+          {/* <Calendar markedDates={markedDates} style={styles.calendar}
             current={now.format('YYYY-MM-DD')}
             onDayPress={(day) => openActionPopup(day.dateString)}
-            theme={{ todayTextColor:'#2563EB', arrowColor:'#2563EB', calendarBackground:'#fff'}}/>
+            theme={{ todayTextColor:'#2563EB', arrowColor:'#2563EB', calendarBackground:'#fff'}}/> */}
 
           {summary && (
             <View style={styles.summaryCard}>
@@ -531,13 +549,16 @@ const styles = StyleSheet.create({
   header:      { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   filterBtn:   { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderWidth: 1, borderColor: '#BFDBFE' },
   filterBtnText: { fontSize: 14, color: '#2563EB', marginHorizontal: 8, fontWeight: '600' },
-  pillRow:     { paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  pill:        { alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, marginRight: 12, borderRadius: 12, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
+  pillRowContainer: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', height: 86, justifyContent: 'center' },
+  pillRowContent: { paddingHorizontal: 16, alignItems: 'center', gap: 10 },
+  pill:        { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 14, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB', minWidth: 66 },
   pillOn:      { backgroundColor: '#2563EB', borderColor: '#2563EB' },
-  pillAvatar:  { width: 32, height: 32, borderRadius: 16, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  pillAvatar:  { width: 32, height: 32, borderRadius: 16, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center', marginBottom: 5 },
   pillAvatarOn: { backgroundColor: '#1D4ED8' },
-  pillAvatarText: { fontSize: 14, fontWeight: '600', color: '#1D4ED8' },
-  pillText:    { fontSize: 12, fontWeight: '500', color: '#374151' },
+  pillAvatarText: { fontSize: 14, fontWeight: '700', color: '#1D4ED8' },
+  pillAvatarTextOn: { color: '#fff' },
+  pillText:    { fontSize: 12, fontWeight: '600', color: '#374151', maxWidth: 64 },
+  pillTextOn:  { color: '#fff' },
   legend:      { flexDirection: 'row', justifyContent: 'center', gap: 10, padding: 12 },
   legendPill:  { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 99 },
   legendText:  { fontSize: 12, fontWeight: '500' },
